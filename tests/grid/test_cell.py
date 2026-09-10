@@ -1,50 +1,111 @@
-from unittest.mock import Mock
+from itertools import product
 
 import pytest
 
-from sudoku_strategy.grid.cell import Cell, CellIterators
+from sudoku_strategy.grid.cell import Cell
 
 
 class TestCell:
-    @pytest.mark.parametrize(
-        ("row", "col", "expected_index"),
-        [
-            (0, 0, 0),
-            (0, 8, 8),
-            (1, 0, 9),
-            (4, 4, 40),
-            (8, 0, 72),
-            (8, 8, 80),
-        ],
-    )
-    def test_index(self, row, col, expected_index):
+    @pytest.mark.parametrize("index", (-10, -1, 81, 90))
+    def test_valueerror_raised_for_index_out_of_range(self, index):
         # ARRANGE
-        cell = Cell(row, col)
+        expected_message = (
+            f"Cell index must be in the range 0-80. '{index}' is not valid."
+        )
 
         # ACT
-        index = cell.index
+        with pytest.raises(ValueError) as exc:
+            Cell(index)
 
         # ASSERT
-        assert index == expected_index
+        assert str(exc.value) == expected_message
+
+    @pytest.mark.parametrize("index", range(81))
+    def test_valid_indexes_produce_correct_cell(self, index):
+        # ACT
+        cell = Cell(index)
+
+        # ASSERT
+        assert cell.index == index
 
     @pytest.mark.parametrize(
-        ("index", "expected_row", "expected_col"),
-        [
-            (0, 0, 0),
-            (8, 0, 8),
-            (9, 1, 0),
-            (40, 4, 4),
-            (72, 8, 0),
-            (80, 8, 8),
-        ],
+        ("row", "col"),
+        list(product(range(8), range(8))),
     )
-    def test_from_index(self, index, expected_row, expected_col):
+    def test_from_position_creates_correct_cell(self, row, col):
         # ACT
-        cell = Cell.from_index(index)
+        cell = Cell.from_position(row, col)
 
         # ASSERT
-        assert cell.row == expected_row
-        assert cell.col == expected_col
+        assert cell.row == row
+        assert cell.col == col
+
+    @pytest.mark.parametrize(
+        ("row", "col"),
+        (
+            (-1, -1),
+            (0, -1),
+            (-1, 0),
+            (9, 8),
+            (8, 9),
+            (9, 9),
+            (5, 11),
+        ),
+    )
+    def test_from_position_raises_value_error_for_invalid_position(self, row, col):
+        # ARRANGE
+        expected_message = f"Row and column for a cell must be in the range 0-8. ({row}, {col}) is not valid."
+
+        # ACT
+        with pytest.raises(ValueError) as exc:
+            Cell.from_position(row, col)
+
+        # ASSERT
+        assert str(exc.value) == expected_message
+
+    @pytest.mark.parametrize(
+        ("index", "expected_row"),
+        (
+            (0, 0),
+            (8, 0),
+            (9, 1),
+            (40, 4),
+            (71, 7),
+            (72, 8),
+            (80, 8),
+        ),
+    )
+    def test_row(self, index, expected_row):
+        # ARRANGE
+        cell = Cell(index)
+
+        # ACT
+        row = cell.row
+
+        # ASSERT
+        assert row == expected_row
+
+    @pytest.mark.parametrize(
+        ("index", "expected_col"),
+        (
+            (0, 0),
+            (8, 8),
+            (10, 1),
+            (40, 4),
+            (71, 8),
+            (75, 3),
+            (80, 8),
+        ),
+    )
+    def test_col(self, index, expected_col):
+        # ARRANGE
+        cell = Cell(index)
+
+        # ACT
+        col = cell.col
+
+        # ASSERT
+        assert col == expected_col
 
     @pytest.mark.parametrize(
         ("row", "col", "expected_box"),
@@ -62,7 +123,7 @@ class TestCell:
     )
     def test_box(self, row, col, expected_box):
         # ARRANGE
-        cell = Cell(row, col)
+        cell = Cell.from_position(row, col)
 
         # ACT
         box = cell.box
@@ -70,273 +131,31 @@ class TestCell:
         # ASSERT
         assert box == expected_box
 
-    @pytest.mark.parametrize(
-        ("row", "col"),
-        [
-            (0, 0),
-            (4, 7),
-            (8, 8),
-        ],
-    )
-    def test_equal_cells_are_equal(self, row, col):
+    @pytest.mark.parametrize("index", range(81))
+    def test_equal_cells_are_equal(self, index):
         # ARRANGE
-        first = Cell(row, col)
-        second = Cell(row, col)
+        first = Cell(index)
+        second = Cell(index)
 
         # ACT & ASSERT
         assert first == second
 
-
-class TestCellIterators:
-    @pytest.mark.parametrize("row", range(9))
-    def test_rows_have_nine_values(self, row):
-        # ARRANGE
-        iterator = CellIterators(Mock())
-
-        # ACT
-        length = len(iterator.row(row))
-
-        # ASSERT
-        assert length == 9
-
-    @pytest.mark.parametrize("col", range(9))
-    def test_cols_have_with_nine_values(self, col):
-        # ARRANGE
-        iterator = CellIterators(Mock())
-
-        # ACT
-        length = len(iterator.col(col))
-
-        # ASSERT
-        assert length == 9
-
-    @pytest.mark.parametrize("box", range(9))
-    def test_boxes_have_nine_values(self, box):
-        # ARRANGE
-        iterator = CellIterators(Mock())
-
-        # ACT
-        length = len(iterator.box(box))
-
-        # ASSERT
-        assert length == 9
-
-    def test_units_produces_27_units_with_nine_values(self):
-        # ARRANGE
-        iterator = CellIterators(Mock())
-
-        # ACT
-        units = iterator.units()
-
-        # ASSERT
-        assert len(units) == 27
-        assert all(len(unit) == 9 for unit in units)
-
-    def test_first_row_contains_expected_cells(self):
-        # ARRANGE
-        iterator = CellIterators(Mock())
-
-        # ACT
-        cells = iterator.row(0)
-
-        # ASSERT
-        assert [(cell.row, cell.col) for cell in cells] == [
-            (0, 0),
-            (0, 1),
-            (0, 2),
-            (0, 3),
-            (0, 4),
-            (0, 5),
-            (0, 6),
-            (0, 7),
-            (0, 8),
-        ]
-
-    def test_first_column_contains_expected_cells(self):
-        # ARRANGE
-        iterator = CellIterators(Mock())
-
-        # ACT
-        cells = iterator.col(0)
-
-        # ASSERT
-        assert [(cell.row, cell.col) for cell in cells] == [
-            (0, 0),
-            (1, 0),
-            (2, 0),
-            (3, 0),
-            (4, 0),
-            (5, 0),
-            (6, 0),
-            (7, 0),
-            (8, 0),
-        ]
-
-    def test_first_box_contains_expected_cells(self):
-        # ARRANGE
-        iterator = CellIterators(Mock())
-
-        # ACT
-        cells = iterator.box(0)
-
-        # ASSERT
-        assert [(cell.row, cell.col) for cell in cells] == [
-            (0, 0),
-            (0, 1),
-            (0, 2),
-            (1, 0),
-            (1, 1),
-            (1, 2),
-            (2, 0),
-            (2, 1),
-            (2, 2),
-        ]
-
-    @pytest.mark.parametrize("cell_idx", range(81))
-    def test_each_cell_has_20_peers(self, cell_idx):
-        # ARRANGE
-        iterator = CellIterators(Mock())
-        cell = Cell.from_index(cell_idx)
-
-        # ACT
-        peers = iterator.peers(cell)
-        count = len(peers)
-
-        # ASSERT
-        assert count == 20
-
     @pytest.mark.parametrize(
-        ("row", "col"),
-        [
-            (0, 0),
-            (0, 8),
-            (4, 4),
-            (8, 0),
-            (8, 8),
-        ],
-    )
-    def test_cell_is_not_its_own_peer(self, row, col):
-        # ARRANGE
-        iterator = CellIterators(Mock())
-        cell = Cell(row, col)
-
-        # ACT
-        peers = iterator.peers(cell)
-
-        # ASSERT
-        assert cell not in peers
-
-    def test_cell_peers_share_row_column_or_box(self):
-        # ARRANGE
-        iterator = CellIterators(Mock())
-        cell = Cell(4, 4)
-
-        # ACT
-        peers = iterator.peers(cell)
-
-        # ASSERT
-        assert all(
-            peer.row == cell.row or peer.col == cell.col or peer.box == cell.box
-            for peer in peers
-        )
-
-    @pytest.mark.parametrize("cell_idx", range(81))
-    def test_cell_has_all_20_unique_peers(self, cell_idx):
-        # ARRANGE
-        iterator = CellIterators(Mock())
-        cell = Cell.from_index(cell_idx)
-
-        # ACT
-        peers = iterator.peers(cell)
-        unique_peers = set(peers)
-
-        # ASSERT
-        assert len(unique_peers) == 20
-
-    def test_cells_returns_all_81_cells(self):
-        # ARRANGE
-        iterator = CellIterators(Mock())
-
-        # ACT
-        cells = list(iterator.cells())
-
-        # ASSERT
-        assert len(cells) == 81
-
-    def test_empty_cells_returns_all_cells_when_all_empty(self):
-        # ARRANGE
-        grid = Mock()
-        grid.cell_empty.return_value = True
-        iterator = CellIterators(grid)
-
-        # ACT
-        cells = iterator.empty_cells()
-
-        # ASSERT
-        assert len(cells) == 81
-
-    def test_empty_cells_returns_no_cells_when_all_filled(self):
-        # ARRANGE
-        grid = Mock()
-        grid.cell_empty.return_value = False
-
-        iterator = CellIterators(grid)
-
-        # ACT
-        cells = iterator.empty_cells()
-
-        # ASSERT
-        assert len(cells) == 0
-
-    def test_empty_cells_only_returns_empty_cells(self):
-        # ARRANGE
-        grid = Mock()
-        filled_cell = Cell(5, 5)
-        grid.cell_empty = lambda cell: cell != filled_cell
-        iterator = CellIterators(grid)
-
-        # ACT
-        cells = iterator.empty_cells()
-
-        # ASSERT
-        assert len(cells) == 80
-        assert filled_cell not in cells
-
-    def test_filled_cells_returns_filled_cells(self):
-        # ARRANGE
-        grid = Mock()
-        filled_cells = [
-            Cell(0, 6),
-            Cell(2, 1),
-            Cell(5, 5),
-            Cell(7, 6),
-            Cell(8, 4),
-        ]
-        grid.cell_empty = lambda cell: cell not in filled_cells
-        iterator = CellIterators(grid)
-
-        # ACT
-        cells = iterator.filled_cells()
-
-        # ASSERT
-        assert len(cells) == len(filled_cells)
-        assert all(cell in filled_cells for cell in cells)
-
-    @pytest.mark.parametrize(
-        "row, col, string",
+        ("row", "col", "expected_string"),
         (
             (0, 0, "R1C1"),
+            (8, 0, "R9C1"),
+            (5, 3, "R6C4"),
             (8, 8, "R9C9"),
-            (0, 5, "R1C6"),
             (7, 2, "R8C3"),
         ),
     )
-    def test_string_gives_expected_representation(self, row, col, string):
+    def test_str(self, row, col, expected_string):
         # ARRANGE
-        cell = Cell(row, col)
+        cell = Cell.from_position(row, col)
 
         # ACT
-        cell_str = str(cell)
+        string = str(cell)
 
         # ASSERT
-        assert cell_str == string
+        assert string == expected_string
