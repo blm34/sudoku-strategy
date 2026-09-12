@@ -1,100 +1,122 @@
 from typing import TYPE_CHECKING
 
+from .cell import Cell
+from .cell_candidates import CellCandidates
+from .cells import Cells
+
 if TYPE_CHECKING:
     from typing import Self
 
-    from .cell import Cell
-
 
 class GridState:
-    """Store grid state and provide information about candidates."""
+    """Store grid state and provide information about candidates.
+
+    Attributes:
+        digits: The list of digits in the grid
+        puzzle_digits: The list of digits for the starting puzzle state
+        cell_candidates: The list of candidates for each cell
+        value_candidates: A list of cell groups for locations of each digit
+            candidate. Indexed by digit (index 0 is ignored)
+        filled_cells: The cells that have a digit filled
+
+    Methods:
+        create_empty
+        new_puzzle
+        copy
+        fill_filled_cells
+        fill_value_candidates
+    """
 
     def __init__(
         self,
         digits: list[int],
-        candidates: list[int],
+        candidates: list[CellCandidates],
         puzzle_digits: tuple[int, ...],
     ):
-        self._digits = digits
-        self._candidates = candidates
-        self._puzzle_digits = puzzle_digits
+        """Initialise a GridState object.
+
+        Args:
+            digits: The list of digits in the grid
+            candidates: The list of candidates for each cell
+            puzzle_digits: The list of digits for the starting puzzle state
+        """
+        # Definitions of the grid state
+        self.digits = digits
+        self.puzzle_digits = puzzle_digits
+        self.cell_candidates = candidates
+
+        # Extra (redundant) information allowing for increased efficiency
+        self.value_candidates = self.fill_value_candidates()
+        self.filled_cells = self.fill_filled_cells()
 
     @classmethod
     def create_empty(cls) -> Self:
+        """Initialise an empty puzzle grid.
+
+        Returns:
+            A GridState containing no values or candidates"""
         return cls(
             digits=[0] * 81,
-            candidates=[0] * 81,
+            candidates=[CellCandidates.empty() for _ in range(81)],
             puzzle_digits=tuple([0] * 81),
         )
 
     @classmethod
     def new_puzzle(cls, puzzle_digits: tuple[int, ...]) -> Self:
+        """Initialise a new puzzle with no values entered.
+
+        Args:
+            puzzle_digits: The digits for the puzzle to start with
+
+        Returns:
+            The grid state for the starting state of the puzzle"""
         if len(puzzle_digits) != 81:
             raise ValueError("Sudoku puzzle must have 81 cells.")
 
         return cls(
             digits=list(puzzle_digits),
-            candidates=[0] * 81,
+            candidates=[CellCandidates.empty() for _ in range(81)],
             puzzle_digits=puzzle_digits,
         )
 
-    def digit(self, cell: Cell) -> int:
-        return self._digits[cell.index]
-
-    def write_digit(self, cell: Cell, digit: int):
-        if not 1 <= digit <= 9:
-            raise ValueError(
-                f"Sudoku cell digit must be from 1-9, {digit} is not valid."
-            )
-        self._digits[cell.index] = digit
-
-    def puzzle_digit(self, cell: Cell) -> int:
-        return self._puzzle_digits[cell.index]
-
-    def candidates(self, cell: Cell) -> int:
-        """Get the candidates for the given cell.
-
-        Candidates are returned as a bit mask with the most significant bit
-        representing 9 and the least significant bit representing 1. 1 is used
-        for bits that represent candidates, 0 for bits representing numbers
-        that are not candidates."""
-        return self._candidates[cell.index]
-
-    def add_candidates(self, cell: Cell, mask: int):
-        """Add candidates to a cell.
-
-        Args:
-            cell: The cell to add the candidates to
-            mask: The maks that has ones set for the bits corresponding to the candidates to add
-        """
-        self._candidates[cell.index] |= mask
-
-    def eliminate_candidates(self, cell: Cell, mask: int):
-        """Eliminate candidates from a cell.
-
-        Args:
-            cell: The cell to remove the candidates from
-            mask: The maks that has ones set for the bits corresponding to the candidates to remove
-        """
-        self._candidates[cell.index] &= ~mask
-
-    def is_complete(self) -> bool:
-        """Has the grid been fully filled in."""
-        return all(digit != 0 for digit in self._digits)
-
-    def cell_empty(self, cell: Cell) -> bool:
-        """Returns true if the given cell has no digit set."""
-        return self._digits[cell.index] == 0
-
     def copy(self) -> GridState:
-        """Returns a deep copy of the current grid state."""
+        """Creates a copy of the current grid state.
+
+        Returns:
+            The copied GridState"""
         return GridState(
-            digits=self._digits.copy(),
-            candidates=self._candidates.copy(),
-            puzzle_digits=self._puzzle_digits,
+            digits=self.digits.copy(),
+            candidates=self.cell_candidates.copy(),
+            puzzle_digits=self.puzzle_digits,
         )
 
-    def reset(self):
-        """Clear all user entered digits and candidates."""
-        self._digits = list(self._puzzle_digits)
-        self._candidates = [0] * 81
+    def fill_value_candidates(self) -> list[Cells]:
+        """Fill in value_candidates using the contents of cell_candidates.
+
+        Changes in place and returns the resulting value.
+
+        Returns:
+            The resulting contents of `value_candidates`
+        """
+        self.value_candidates = [Cells() for _ in range(10)]
+
+        for idx, candidates in enumerate(self.cell_candidates):
+            for digit in candidates:
+                self.value_candidates[digit] += Cell(idx)
+
+        return self.value_candidates
+
+    def fill_filled_cells(self) -> Cells:
+        """Fill out filled_cells from the contents of digits.
+
+        Changes in place and returns the resulting cells
+
+        Returns:
+            The resulting value of `filled_cells`
+        """
+        self.filled_cells = Cells()
+        for idx, digit in enumerate(self.digits):
+            if digit:
+                self.filled_cells += Cell(idx)
+
+        return self.filled_cells
