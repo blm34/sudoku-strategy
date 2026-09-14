@@ -1,237 +1,289 @@
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from sudoku_strategy.grid import Cell, CellCandidates, CellGroups, Cells, GridState
 from sudoku_strategy.grid.analysis import GridAnalysis
-from sudoku_strategy.grid.cell import Cell, CellIterators
-from sudoku_strategy.grid.state import GridState
-from sudoku_strategy.grid.utils import ALL_DIGITS
 
 
 class TestGridAnalysis:
-    def test_uses_supplied_cell_relations(self):
+    @pytest.fixture
+    def state(self):
+        state = Mock(GridState)
+
+        state.digits = [None] * 81
+        state.puzzle_digits = [None] * 81
+        state.cell_candidates = [MagicMock(CellCandidates) for _ in range(81)]
+        state.value_candidates = {digit: MagicMock(Cells) for digit in range(1, 10)}
+        state.filled_cells = MagicMock(Cells)
+
+        return state
+
+    @pytest.fixture
+    def cell_groups(self):
+        return MagicMock(CellGroups)
+
+    @pytest.fixture
+    def analysis(self, state, cell_groups):
+        return GridAnalysis(state, cell_groups)
+
+    def test_get_cells_with_candidate_gets_intersection_of_given_cells_with_cells_with_candidate(
+        self,
+        analysis,
+        state,
+    ):
         # ARRANGE
-        relations = Mock()
-        state = GridState.create_empty()
+        cells_in = {1, 2, 3}
+        digit = 4
+        state.value_candidates[digit] = {2, 3, 4}
 
         # ACT
-        grid = GridAnalysis(state, relations)
+        cells = analysis.get_cells_with_candidate(cells_in, digit)
 
         # ASSERT
-        assert grid.iterate is relations
+        assert cells == {2, 3}
 
-    def test_creates_cell_relations_when_none_supplied(self):
+    def test_count_cells_with_candidate_gets_length_of_candidates(self, analysis):
         # ARRANGE
-        state = GridState.create_empty()
+        cells_with_candidate = MagicMock(Cells)
+        cells_with_candidate.__len__.return_value = 44
+
+        with patch.object(
+            analysis,
+            "get_cells_with_candidate",
+            return_value=cells_with_candidate,
+        ):
+            # ACT
+            length = analysis.count_cells_with_candidate(Mock(Cells), 2)
+
+        # ASSERT
+        assert length == 44
+
+    def test_get_candidates_for_cell_gets_candidates_for_the_cell(
+        self,
+        analysis,
+        state,
+    ):
+        # ARRANGE
+        cell = Mock(Cell, index=17)
+        expected_candidates = state.cell_candidates[cell.index]
 
         # ACT
-        grid = GridAnalysis(state)
+        candidates = analysis.get_candidates_for_cell(cell)
 
         # ASSERT
-        assert isinstance(grid.iterate, CellIterators)
+        assert candidates is expected_candidates
 
-    @pytest.mark.parametrize("cell_idx", range(81))
-    def test_get_candidates_for_empty_grid_returns_no_digits(self, cell_idx):
+    def test_count_candidates_in_cell_gets_length_of_candidates_in_cell(self, analysis):
         # ARRANGE
-        state = GridState.create_empty()
-        analysis = GridAnalysis(state)
-        cell = Cell.from_index(cell_idx)
+        cell_candidates = MagicMock(CellCandidates)
+        cell_candidates.__len__.return_value = 7
+
+        with patch.object(
+            analysis,
+            "get_candidates_for_cell",
+            return_value=cell_candidates,
+        ):
+            # ACT
+            count = analysis.count_candidates_in_cell(Mock(Cell))
+
+        # ASSERT
+        assert count == 7
+
+    def test_get_digit_in_cell_gets_digit_in_the_given_cell(self, analysis, state):
+        # ARRANGE
+        cell = Mock(Cell, index=15)
+        expected_digit = state.digits[cell.index]
 
         # ACT
-        candidates = list(analysis.get_candidates_for_cell(cell))
+        digit = analysis.get_digit_in_cell(cell)
 
         # ASSERT
-        assert candidates == []
+        assert digit is expected_digit
 
-    @pytest.mark.parametrize("cell_idx", range(81))
-    def test_get_candidates_for_cell_with_all_candidates_returns_all(self, cell_idx):
+    @pytest.mark.parametrize("digit", (3, 5, 7, 8))
+    def test_cell_has_candidate_true_when_cell_has_candidate(
+        self,
+        analysis,
+        state,
+        digit,
+    ):
         # ARRANGE
-        state = GridState.create_empty()
-        analysis = GridAnalysis(state)
-        cell = Cell.from_index(cell_idx)
-        state.add_candidates(cell, 0b111111111)
+        cell = Mock(Cell, index=26)
+        state.cell_candidates[cell.index] = {3, 5, 7, 8}
 
         # ACT
-        candidates = list(analysis.get_candidates_for_cell(cell))
+        contained = analysis.cell_has_candidate(cell, digit)
 
         # ASSERT
-        assert candidates == list(range(1, 10))
+        assert contained
 
-    @pytest.mark.parametrize("cell_idx", range(81))
-    def test_count_candidates_for_empty_cell_returns_zero(self, cell_idx):
+    @pytest.mark.parametrize("digit", (1, 2, 4, 6, 9))
+    def test_cell_has_candidate_false_when_cell_does_not_have_candidate(
+        self,
+        analysis,
+        state,
+        digit,
+    ):
         # ARRANGE
-        state = GridState.create_empty()
-        analysis = GridAnalysis(state)
-        cell = Cell.from_index(cell_idx)
+        cell = Mock(Cell, index=26)
+        state.cell_candidates[cell.index] = {3, 5, 7, 8}
 
         # ACT
-        count = analysis.count_candidates_in_cell(cell)
+        contained = analysis.cell_has_candidate(cell, digit)
 
         # ASSERT
-        assert count == 0
+        assert not contained
 
-    @pytest.mark.parametrize("cell_idx", range(81))
-    def test_count_candidates_for_cell_with_all_candidates_returns_nine(self, cell_idx):
+    def test_is_puzzle_digit_returns_true_for_a_puzzle_digit(self, analysis, state):
         # ARRANGE
-        state = GridState.create_empty()
-        analysis = GridAnalysis(state)
-        cell = Cell.from_index(cell_idx)
-        state.add_candidates(cell, 0b111111111)
+        state.puzzle_digits = (0,) * 20 + (1,) + (0,) * 60
+        cell = Mock(Cell, index=20)
 
         # ACT
-        count = analysis.count_candidates_in_cell(cell)
+        is_puzzle_digit = analysis.is_puzzle_digit(cell)
 
         # ASSERT
-        assert count == 9
+        assert is_puzzle_digit
 
-    def test_get_cells_with_candidate_returns_all_cells_with_that_candidate(self):
+    def test_is_puzzle_digit_returns_false_for_a_non_puzzle_digit(
+        self,
+        analysis,
+        state,
+    ):
         # ARRANGE
-        state = GridState.create_empty()
-        state._candidates = [ALL_DIGITS] * 81
-        analysis = GridAnalysis(state)
-        cells = [Cell(0, col) for col in range(9)]
+        state.puzzle_digits = (0,) * 81
+        cell = Mock(Cell, index=20)
 
         # ACT
-        result = list(analysis.get_cells_with_candidate(cells, 7))
+        is_puzzle_digit = analysis.is_puzzle_digit(cell)
 
         # ASSERT
-        assert result == cells
+        assert not is_puzzle_digit
 
-    def test_count_cells_with_candidate_returns_nine_initially(self):
+    def test_is_complete_returns_false_when_grid_is_not_full(self, analysis, state):
         # ARRANGE
-        state = GridState.create_empty()
-        state._candidates = [ALL_DIGITS] * 81
-        analysis = GridAnalysis(state)
-        cells = (Cell(0, col) for col in range(9))
+        state.filled_cells.__len__.return_value = 80
 
         # ACT
-        count = analysis.count_cells_with_candidate(cells, 7)
+        complete = analysis.is_complete()
 
         # ASSERT
-        assert count == 9
+        assert not complete
 
-    def test_get_cells_with_candidate_filters_cells(self):
+    def test_is_complete_returns_false_for_duplicate_in_row(self, analysis, state):
         # ARRANGE
-        state = GridState.create_empty()
-        target = Cell(0, 0)
-        state._candidates = [ALL_DIGITS] * 81
-        state._candidates[target.index] = 0b111101111
-        analysis = GridAnalysis(state)
-        cells = (Cell(0, col) for col in range(9))
+        state.filled_cells.__len__.return_value = 81
+
+        digits = [1, 2, 3, 3, 5, 6, 7, 8, 9]
+        analysis.get_digit_in_cell = Mock()
+        analysis.get_digit_in_cell.side_effect = digits
+
+        cells = [
+            Mock(Cell, row=1, col=0, box=0),
+            Mock(Cell, row=1, col=1, box=0),
+            Mock(Cell, row=1, col=2, box=0),
+            Mock(Cell, row=1, col=3, box=1),
+            Mock(Cell, row=1, col=4, box=1),
+            Mock(Cell, row=1, col=5, box=1),
+            Mock(Cell, row=1, col=6, box=2),
+            Mock(Cell, row=1, col=7, box=2),
+            Mock(Cell, row=1, col=8, box=2),
+        ]
+        analysis.cell_groups.cells = Mock(Cells)
+        analysis.cell_groups.cells.return_value = cells
 
         # ACT
-        candidates = analysis.get_cells_with_candidate(cells, 5)
+        complete = analysis.is_complete()
 
         # ASSERT
-        assert target not in candidates
-        assert len(candidates) == 8
+        assert not complete
 
-    def test_count_cells_with_candidate_filters_cells(self):
+    def test_is_complete_returns_false_for_duplicate_in_col(self, analysis, state):
         # ARRANGE
-        state = GridState.create_empty()
-        target = Cell(0, 0)
-        written_digit = 5
-        state._candidates = [ALL_DIGITS] * 81
-        state._candidates[target.index] = 0b111101111
-        analysis = GridAnalysis(state)
-        cells = (Cell(0, col) for col in range(9))
+        state.filled_cells.__len__.return_value = 81
+
+        digits = [1, 2, 3, 4, 5, 6, 2, 8, 9]
+        analysis.get_digit_in_cell = Mock()
+        analysis.get_digit_in_cell.side_effect = digits
+
+        cells = [
+            Mock(Cell, row=0, col=5, box=1),
+            Mock(Cell, row=1, col=5, box=1),
+            Mock(Cell, row=2, col=5, box=1),
+            Mock(Cell, row=3, col=5, box=4),
+            Mock(Cell, row=4, col=5, box=4),
+            Mock(Cell, row=5, col=5, box=4),
+            Mock(Cell, row=6, col=5, box=7),
+            Mock(Cell, row=7, col=5, box=7),
+            Mock(Cell, row=8, col=5, box=7),
+        ]
+        analysis.cell_groups.cells = Mock(Cells)
+        analysis.cell_groups.cells.return_value = cells
 
         # ACT
-        count = analysis.count_cells_with_candidate(cells, written_digit)
+        complete = analysis.is_complete()
 
         # ASSERT
-        assert count == 8
+        assert not complete
 
-    def test_get_candidates_for_cell_returns_only_remaining_candidates(self):
+    def test_is_complete_returns_false_for_duplicate_in_box(self, analysis, state):
         # ARRANGE
-        state = GridState.create_empty()
-        cell = Cell(0, 3)
-        state._candidates[cell.index] = 0b011101101
+        state.filled_cells.__len__.return_value = 81
 
-        analysis = GridAnalysis(state)
+        digits = [1, 2, 3, 9, 5, 6, 7, 8, 9]
+        analysis.get_digit_in_cell = Mock()
+        analysis.get_digit_in_cell.side_effect = digits
+
+        cells = [
+            Mock(Cell, row=0, col=0, box=0),
+            Mock(Cell, row=0, col=1, box=0),
+            Mock(Cell, row=0, col=2, box=0),
+            Mock(Cell, row=1, col=0, box=0),
+            Mock(Cell, row=1, col=1, box=0),
+            Mock(Cell, row=1, col=2, box=0),
+            Mock(Cell, row=2, col=0, box=0),
+            Mock(Cell, row=2, col=1, box=0),
+            Mock(Cell, row=2, col=2, box=0),
+        ]
+        analysis.cell_groups.cells = Mock(Cells)
+        analysis.cell_groups.cells.return_value = cells
 
         # ACT
-        candidates = list(analysis.get_candidates_for_cell(cell))
+        complete = analysis.is_complete()
 
         # ASSERT
-        assert candidates == [1, 3, 4, 6, 7, 8]
+        assert not complete
 
-    def test_count_candidates_for_cell_returns_remaining_count(self):
+    def test_is_complete_is_true_for_a_valid_grid(self, analysis, state):
         # ARRANGE
-        state = GridState.create_empty()
-        cell = Cell(0, 3)
-        state._candidates[cell.index] = 0b011101101
+        state.filled_cells.__len__.return_value = 81
 
-        analysis = GridAnalysis(state)
+        # fmt: off
+        digits = [
+        5, 3, 4, 6, 7, 8, 9, 1, 2,
+        6, 7, 2, 1, 9, 5, 3, 4, 8,
+        1, 9, 8, 3, 4, 2, 5, 6, 7,
+        8, 5, 9, 7, 6, 1, 4, 2, 3,
+        4, 2, 6, 8, 5, 3, 7, 9, 1,
+        7, 1, 3, 9, 2, 4, 8, 5, 6,
+        9, 6, 1, 5, 3, 7, 2, 8, 4,
+        2, 8, 7, 4, 1, 9, 6, 3, 5,
+        3, 4, 5, 2, 8, 6, 1, 7, 9
+        ]
+        # fmt: on
+        analysis.get_digit_in_cell = Mock()
+        analysis.get_digit_in_cell.side_effect = digits
+
+        cells = [
+            Mock(Cell, row=i // 9, col=i % 9, box=(i // 27) * 3 + (i % 9) // 3)
+            for i in range(81)
+        ]
+        analysis.cell_groups.cells = Mock(Cells)
+        analysis.cell_groups.cells.return_value = cells
 
         # ACT
-        count = analysis.count_candidates_in_cell(cell)
+        complete = analysis.is_complete()
 
         # ASSERT
-        assert count == 6
-
-    def test_get_digit_in_cell_checks_the_grid_state(self):
-        # ARRANGE
-        state = GridState.create_empty()
-        state.digit = Mock()
-        analysis = GridAnalysis(state)
-
-        cell = Mock()
-
-        # ACT
-        _ = analysis.get_digit_in_cell(cell)
-
-        # ASSERT
-        state.digit.assert_called_once_with(cell)
-
-    @pytest.mark.parametrize(
-        "mask, digit",
-        (
-            (0b111111111, 5),
-            (0b000001000, 4),
-            (0b010101010, 8),
-            (0b110011001, 1),
-        ),
-    )
-    def test_cell_has_candidate_true_case(self, mask, digit):
-        # ARRANGE
-        state = GridState.create_empty()
-        state.candidates = Mock()
-        state.candidates.return_value = mask
-
-        analysis = GridAnalysis(state)
-
-        cell = Cell(0, 0)
-
-        # ACT
-        has_digit = analysis.cell_has_candidate(cell, digit)
-
-        # ASSERT
-        assert has_digit
-        state.candidates.assert_called_once_with(cell)
-
-    @pytest.mark.parametrize(
-        "mask, digit",
-        (
-            (0b000000000, 5),
-            (0b111000011, 4),
-            (0b010101010, 9),
-            (0b110011001, 7),
-        ),
-    )
-    def test_cell_has_candidate_false_case(self, mask, digit):
-        # ARRANGE
-        state = GridState.create_empty()
-        state.candidates = Mock()
-        state.candidates.return_value = mask
-
-        analysis = GridAnalysis(state)
-
-        cell = Cell(0, 0)
-
-        # ACT
-        has_digit = analysis.cell_has_candidate(cell, digit)
-
-        # ASSERT
-        assert not has_digit
-        state.candidates.assert_called_once_with(cell)
+        assert complete
