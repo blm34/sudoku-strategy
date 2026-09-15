@@ -1,10 +1,9 @@
-from .grid import Cell, GridState
+from .grid import Grid
 from .persistance import SudokuFileReader, SudokuFileWriter
 from .solver import Solver
 
 __all__ = [
-    "Cell",
-    "GridState",
+    "Grid",
     "Solver",
     "SudokuFileReader",
     "SudokuFileWriter",
