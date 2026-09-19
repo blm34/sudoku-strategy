@@ -31,12 +31,12 @@ class HiddenSingleStrategy(AbsStrategy):
         Returns:
             The cell containing a hidden single and it's value
         """
-        for cells in analysis.iterate.units():
+        for cells in analysis.cell_groups.units():
             for digit in range(1, 10):
                 candidate_cells = analysis.get_cells_with_candidate(cells, digit)
                 if len(candidate_cells) == 1:
                     return CellDigit(
-                        cell=candidate_cells[0],
+                        cell=next(iter(candidate_cells)),
                         digit=digit,
                     )
         return None

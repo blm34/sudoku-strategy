@@ -33,7 +33,7 @@ class NakedSingleStrategy(AbsStrategy):
         Returns:
             A cell that contains a naked single
         """
-        for cell in analysis.iterate.empty_cells():
+        for cell in analysis.cell_groups.empty_cells():
             if analysis.count_candidates_in_cell(cell) == 1:
                 return cell
         return None
@@ -49,4 +49,5 @@ class NakedSingleStrategy(AbsStrategy):
         Returns:
             The value of the naked single
         """
-        return analysis.get_candidates_for_cell(cell)[0]
+        candidates = analysis.get_candidates_for_cell(cell)
+        return next(iter(candidates))
