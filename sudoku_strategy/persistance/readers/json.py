@@ -25,7 +25,7 @@ Example of the json format:
 import json
 from typing import TYPE_CHECKING
 
-from sudoku_strategy.grid import Cell, GridModifier, GridState
+from sudoku_strategy.grid import Cell, Grid
 
 from .interface import AbsSudokuReader
 
@@ -34,24 +34,23 @@ if TYPE_CHECKING:
 
 
 class JsonReader(AbsSudokuReader):
-    def read(self, stream: TextIO) -> GridState:
+    def read(self, stream: TextIO) -> Grid:
         """Read a json format from a text stream."""
         grid_dict = json.load(stream)
 
         # Create grid with the given puzzle digits
-        grid = GridState.new_puzzle(tuple(grid_dict["puzzle_digits"]))
-        modifier = GridModifier(grid)
+        grid = Grid.new_puzzle(tuple(grid_dict["puzzle_digits"]))
 
         # Add the entered digits to the grid
         for idx, val in enumerate(grid_dict["digits"]):
             if val != 0:
-                cell = Cell.from_index(idx)
-                modifier.write_digit(val, cell)
+                cell = Cell(idx)
+                grid.modify.write_digit(val, cell)
 
         # Update the puzzle's candidates
         for idx, candidate_list in enumerate(grid_dict["candidate_values"]):
             if len(candidate_list) != 0:
-                cell = Cell.from_index(idx)
-                modifier.add_candidates(candidate_list, cell)
+                cell = Cell(idx)
+                grid.modify.add_candidates(candidate_list, cell)
 
         return grid

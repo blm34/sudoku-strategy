@@ -25,33 +25,30 @@ Example of the json format:
 import json
 from typing import TYPE_CHECKING
 
-from sudoku_strategy.grid import GridAnalysis
-
 from .interface import AbsSudokuWriter
 
 if TYPE_CHECKING:
     from typing import TextIO
 
-    from sudoku_strategy.grid import GridState
+    from sudoku_strategy.grid import Grid
 
 
 class JsonWriter(AbsSudokuWriter):
-    def write(self, grid: GridState, stream: TextIO):
+    def write(self, grid: Grid, stream: TextIO):
         """Read a json format from a text stream."""
-        analysis = GridAnalysis(grid)
-
         grid_dict = {
             "puzzle_digits": [],
             "digits": [],
             "candidate_values": [],
         }
 
-        for cell in analysis.iterate.cells():
-            grid_dict["puzzle_digits"].append(grid.puzzle_digit(cell))
+        for cell in grid.analyse.cell_groups.cells():
+            digit = grid.analyse.get_digit_in_cell(cell)
+            puzzle_digit = grid.analyse.is_puzzle_digit(cell) and digit or 0
+            candidates = grid.analyse.get_candidates_for_cell(cell)
 
-            grid_dict["digits"].append(grid.digit(cell))
-
-            candidates = analysis.get_candidates_for_cell(cell)
+            grid_dict["puzzle_digits"].append(puzzle_digit)
+            grid_dict["digits"].append(digit)
             grid_dict["candidate_values"].append(list(candidates))
 
         json.dump(grid_dict, stream)

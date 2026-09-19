@@ -5,7 +5,7 @@ from .readers import JsonReader, SusserReader
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from sudoku_strategy.grid import GridState
+    from sudoku_strategy.grid import Grid
 
     from .readers.interface import AbsSudokuReader
 
@@ -17,7 +17,7 @@ READERS = {
 
 
 class SudokuFileReader:
-    def load(self, path: Path) -> GridState:
+    def load(self, path: Path) -> Grid:
         reader = self._reader_for(path)
 
         with path.open("r") as stream:

@@ -9,7 +9,7 @@ up to 81, the following preference list is used: '0', '.', 'X', '*', '_', ' '
 
 from typing import TYPE_CHECKING
 
-from sudoku_strategy.grid import GridState
+from sudoku_strategy.grid import Grid
 
 from .interface import AbsSudokuReader
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 class SusserReader(AbsSudokuReader):
-    def read(self, stream: TextIO) -> GridState:
+    def read(self, stream: TextIO) -> Grid:
         """Read a susser format from a text stream"""
         text = stream.readline()
         if len(text) != 81:
@@ -33,7 +33,7 @@ class SusserReader(AbsSudokuReader):
             else:
                 digits.append(int(char))
 
-        return GridState.new_puzzle(tuple(digits))
+        return Grid.new_puzzle(tuple(digits))
 
     # TODO: This should work for any character - not just the 'prefered' ones
     def _get_empty_character(self, text: str) -> str:

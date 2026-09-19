@@ -5,7 +5,7 @@ from .writers import JsonWriter, SusserWriter
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from sudoku_strategy.grid import GridState
+    from sudoku_strategy.grid import Grid
 
     from .writers.interface import AbsSudokuWriter
 
@@ -17,7 +17,7 @@ WRITERS = {
 
 
 class SudokuFileWriter:
-    def save(self, grid: GridState, path: Path):
+    def save(self, grid: Grid, path: Path):
         writer = self._writer_for(path)
 
         with path.open("w") as stream:
