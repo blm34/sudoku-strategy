@@ -1,338 +1,406 @@
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from sudoku_strategy.grid.cell import Cell
+from sudoku_strategy.grid import Cell, CellCandidates, CellGroups, Cells, GridState
 from sudoku_strategy.grid.modifier import GridModifier
-from sudoku_strategy.grid.state import GridState
-from sudoku_strategy.grid.utils import ALL_DIGITS, digit_mask
 from sudoku_strategy.strategy.deduction import CellDigit, Deduction
 
 
 class TestGridModifier:
-    def test_add_digit_writes_the_digit_to_the_cell(self):
-        # ARRANGE
-        grid = GridState.create_empty()
-        modifier = GridModifier(grid)
-        modifier.write_digit = Mock()
+    @pytest.fixture
+    def state(self):
+        state = Mock(GridState)
 
-        digit = 5
-        cell = Cell(4, 6)
+        state.digits = [None] * 81
+        state.puzzle_digits = [None] * 81
+        state.cell_candidates = [MagicMock(CellCandidates) for _ in range(81)]
+        state.value_candidates = {digit: MagicMock(Cells) for digit in range(1, 10)}
+        state.filled_cells = MagicMock(Cells)
+
+        return state
+
+    @pytest.fixture
+    def cell_groups(self):
+        return MagicMock(CellGroups)
+
+    @pytest.fixture
+    def modifier(self, state, cell_groups):
+        return GridModifier(state, cell_groups)
+
+    def test_set_digit_writes_to_digit(self, modifier, state):
+        # ARRANGE
+        cell_index = 42
+        digit = 7
 
         # ACT
-        modifier.add_digit(digit, cell)
+        modifier._set_digit(digit, cell_index)
 
         # ASSERT
-        modifier.write_digit.assert_called_once_with(digit, cell)
+        assert state.digits[cell_index] == digit
 
-    def test_add_digit_eliminates_the_relevant_candidates(self):
+    def test_add_cell_to_filled_cells_updates_filled_cells(self, modifier, state):
         # ARRANGE
-        grid = GridState.create_empty()
-        modifier = GridModifier(grid)
-        modifier.update_candidates = Mock()
-
-        digit = 5
-        cell = Cell(4, 6)
+        cell = MagicMock(Cell)
+        filled_cells = state.filled_cells
 
         # ACT
-        modifier.add_digit(digit, cell)
+        modifier._add_cell_to_filled_cells(cell)
 
         # ASSERT
-        modifier.update_candidates.assert_called_once_with(digit, cell)
+        filled_cells.__iadd__.assert_called_once_with(cell)
 
-    def test_write_digit_stores_digit(self):
+    def test_clear_candidates_in_cell_updates_cell_candidates(self, modifier, state):
         # ARRANGE
-        grid = GridState.create_empty()
-        modifier = GridModifier(grid)
-        cell = Cell(3, 4)
+        cell = Mock(Cell, index=42)
+        cell_candidates = MagicMock(CellCandidates)
+
+        state.cell_candidates[cell.index] = cell_candidates
+
+        # ACT
+        modifier._clear_candidates_in_cell(cell)
+
+        # ASSERT
+        cell_candidates.remove_all.assert_called_once()
+
+    def test_clear_candidates_in_cell_updates_value_candidates(self, modifier, state):
+        # ARRANGE
+        cell = Mock(Cell, index=42)
+        cell_candidates = MagicMock(CellCandidates)
+
+        value_candidates_2 = state.value_candidates[2]
+        value_candidates_5 = state.value_candidates[5]
+        value_candidates_9 = state.value_candidates[9]
+
+        state.cell_candidates[cell.index] = cell_candidates
+        cell_candidates.__iter__.return_value = iter([2, 5, 9])
+
+        # ACT
+        modifier._clear_candidates_in_cell(cell)
+
+        # ASSERT
+        value_candidates_2.__isub__.assert_called_once_with(cell)
+        value_candidates_5.__isub__.assert_called_once_with(cell)
+        value_candidates_9.__isub__.assert_called_once_with(cell)
+
+    def test_write_digit_updates_digits(self, modifier, state):
+        # ARRANGE
+        cell = Mock(Cell, index=42)
 
         # ACT
         modifier.write_digit(7, cell)
 
         # ASSERT
-        assert grid._digits[cell.index] == 7
+        assert state.digits[cell.index] == 7
 
-    def test_update_candidates_removes_candidate_from_peers(self):
+    def test_write_digit_updates_filled_cells(self, modifier):
         # ARRANGE
-        target = Cell(4, 4)
-        peer = Cell(4, 5)
-        unrelated = Cell(0, 0)
-        digit = 7
+        cell = Mock(Cell, index=42)
 
-        iterator = Mock()
-        iterator.peers.return_value = (peer,)
+        with patch.object(modifier, "_add_cell_to_filled_cells") as add_cell:
+            # ACT
+            modifier.write_digit(7, cell)
 
-        grid = GridState.create_empty()
-        grid._candidates = [ALL_DIGITS] * 81
-        modifier = GridModifier(grid, iterator)
+            # ASSERT
+            add_cell.assert_called_once_with(cell)
+
+    def test_write_digit_updates_cell_candidates(self, modifier):
+        # ARRANGE
+        cell = Mock(Cell, index=42)
+
+        with patch.object(modifier, "_clear_candidates_in_cell") as clear_candidates:
+            # ACT
+            modifier.write_digit(7, cell)
+
+            # ASSERT
+            clear_candidates.assert_called_once_with(cell)
+
+    def test_update_candidates_only_considers_peers_with_the_candidate(
+        self, modifier, state, cell_groups
+    ):
+        # ARRANGE
+        cell = Mock(Cell)
+        peer_with_candidate = Mock(Cell)
+        peer_without_candidate = Mock(Cell)
+        candidate_but_not_peer = Mock(Cell)
+
+        cell_groups.peers.return_value = {
+            peer_with_candidate,
+            peer_without_candidate,
+        }
+        state.value_candidates[7] = {
+            peer_with_candidate,
+            candidate_but_not_peer,
+        }
+
+        with patch.object(modifier, "remove_candidate") as remove_candidate:
+            # ACT
+            modifier.update_candidates(7, cell)
+
+            # ASSERT
+            remove_candidate.assert_called_once_with(7, peer_with_candidate)
+
+    def test_update_candidates_removes_candidate_from_all_resulting_cells(
+        self, modifier, state, cell_groups
+    ):
+        # ARRANGE
+        cell = Mock(Cell)
+        peer_1 = Mock(Cell)
+        peer_2 = Mock(Cell)
+        peer_3 = Mock(Cell)
+        peers = {peer_1, peer_2, peer_3}
+
+        cell_groups.peers.return_value = peers
+        state.value_candidates[7] = peers
+
+        with patch.object(modifier, "remove_candidate") as remove_candidate:
+            # ACT
+            modifier.update_candidates(7, cell)
+
+            # ASSERT
+            assert remove_candidate.call_count == 3
+            remove_candidate.assert_any_call(7, peer_1)
+            remove_candidate.assert_any_call(7, peer_2)
+            remove_candidate.assert_any_call(7, peer_3)
+
+    def test_remove_candidates_updates_cell_candidates(self, modifier, state):
+        # ARRANGE
+        cell = Mock(Cell, index=42)
+        cell_candidates = MagicMock(CellCandidates)
+
+        state.cell_candidates[cell.index] = cell_candidates
 
         # ACT
-        modifier.update_candidates(digit, target)
+        modifier.remove_candidate(7, cell)
 
         # ASSERT
-        mask = digit_mask(7)
-        assert not grid.candidates(peer) & mask
-        assert grid.candidates(unrelated) & mask
+        cell_candidates.__isub__.assert_called_once_with(7)
 
-    def test_update_candidates_sets_targets_candidates_to_zero(self):
+    def test_remove_candidates_updates_value_candidates(self, modifier, state):
         # ARRANGE
-        grid = GridState.create_empty()
-        modifier = GridModifier(grid)
-        cell = Cell(0, 0)
+        cell = Mock(Cell, index=42)
+        value_candidates = MagicMock(Cells)
+
+        state.value_candidates[7] = value_candidates
 
         # ACT
-        modifier.update_candidates(7, cell)
+        modifier.remove_candidate(7, cell)
 
         # ASSERT
-        assert grid.candidates(cell) == 0
+        value_candidates.__isub__.assert_called_once_with(cell)
 
-    def test_update_candidates_removes_candidate_from_row_peer(self):
+    def test_add_candidate_updates_cell_candidates(self, modifier, state):
         # ARRANGE
-        grid = GridState.create_empty()
-        modifier = GridModifier(grid)
+        cell = Mock(Cell, index=42)
+        cell_candidates = MagicMock(CellCandidates)
+        candidates_to_remove = MagicMock(Cells)
 
-        target = Cell(0, 0)
-        peer = Cell(0, 8)
-        digit = 5
+        state.cell_candidates[cell.index] = cell_candidates
 
-        # ACT
-        modifier.update_candidates(digit, target)
+        with patch(
+            "sudoku_strategy.grid.modifier.CellCandidates.from_digits",
+            return_value=candidates_to_remove,
+        ):
+            # ACT
+            modifier.remove_candidates([2, 5, 9], cell)
 
-        # ASSERT
-        mask = digit_mask(digit)
-        assert not grid.candidates(peer) & mask
+            # ASSERT
+            candidates_to_remove.__invert__.assert_called_once()
+            cell_candidates.__iand__.assert_called_once_with(
+                candidates_to_remove.__invert__.return_value
+            )
 
-    def test_update_candidates_removes_candidate_from_column_peer(self):
+    def test_add_candidate_updates_value_candidates(self, modifier, state):
         # ARRANGE
-        grid = GridState.create_empty()
-        modifier = GridModifier(grid)
+        cell = Mock(Cell, index=42)
+        candidates_to_add = MagicMock(CellCandidates)
+        candidates_to_add.__iter__.return_value = iter([2])
+        edited_value_candidates = state.value_candidates[2]
 
-        target = Cell(0, 0)
-        peer = Cell(8, 0)
-        digit = 5
+        with patch(
+            "sudoku_strategy.grid.modifier.CellCandidates.from_digits",
+            return_value=candidates_to_add,
+        ):
+            # ACT
+            modifier.remove_candidates([2], cell)
 
-        # ACT
-        modifier.update_candidates(digit, target)
+            # ASSERT
+            edited_value_candidates.__isub__.assert_called_once_with(cell)
 
-        # ASSERT
-        mask = digit_mask(digit)
-        assert not grid.candidates(peer) & mask
-
-    def test_update_candidates_removes_candidate_from_box_peer(self):
+    def test_add_candidates_updates_cell_candidates(self, modifier, state):
         # ARRANGE
-        grid = GridState.create_empty()
-        modifier = GridModifier(grid)
+        cell = Mock(Cell, index=24)
+        cell_candidates = MagicMock(CellCandidates)
+        candidates_to_add = MagicMock(CellCandidates)
 
-        target = Cell(0, 0)
-        peer = Cell(2, 2)
-        digit = 5
+        state.cell_candidates[cell.index] = cell_candidates
 
-        # ACT
-        modifier.update_candidates(digit, target)
+        with patch(
+            "sudoku_strategy.grid.modifier.CellCandidates.from_digits",
+            return_value=candidates_to_add,
+        ):
+            # ACT
+            modifier.add_candidates([2, 5, 9], cell)
 
-        # ASSERT
-        mask = digit_mask(digit)
-        assert not grid.candidates(peer) & mask
+            # ASSERT
+            cell_candidates.__ior__.assert_called_once_with(candidates_to_add)
 
-    def test_update_candidates_doesnt_remove_candidate_from_unrelated_cell(self):
+    def test_add_candidates_updates_value_candidates(self, modifier, state):
         # ARRANGE
-        grid = GridState.create_empty()
-        grid._candidates = [ALL_DIGITS] * 81
-        modifier = GridModifier(grid)
+        cell = Mock(Cell, index=24)
 
-        target = Cell(0, 0)
-        unrelated = Cell(3, 3)
-        digit = 5
+        candidates_to_add = MagicMock(CellCandidates)
+        candidates_to_add.__iter__.return_value = iter([2, 5, 9])
 
-        # ACT
-        modifier.update_candidates(digit, target)
+        value_candidates_2 = state.value_candidates[2]
+        value_candidates_5 = state.value_candidates[5]
+        value_candidates_9 = state.value_candidates[9]
 
-        # ASSERT
-        mask = digit_mask(digit)
-        assert grid.candidates(unrelated) & mask
+        with patch(
+            "sudoku_strategy.grid.modifier.CellCandidates.from_digits",
+            return_value=candidates_to_add,
+        ):
+            # ACT
+            modifier.add_candidates([2, 5, 9], cell)
 
-    @pytest.mark.parametrize(
-        "digits, expected_mask",
-        (
-            ((1, 2, 3), 0b000000111),
-            ((4, 5, 6), 0b000111000),
-            ((7, 8, 9), 0b111000000),
-            ((1,), 0b000000001),
-            ((1, 3, 5, 7, 9), 0b101010101),
-            ((1, 2, 3, 4, 5, 6, 7, 8, 9), 0b111111111),
-            ((), 0b000000000),
-        ),
-    )
-    def test_get_candidate_mask(self, digits, expected_mask):
+            # ASSERT
+            value_candidates_2.__iadd__.assert_called_once_with(cell)
+            value_candidates_5.__iadd__.assert_called_once_with(cell)
+            value_candidates_9.__iadd__.assert_called_once_with(cell)
+
+    def test_apply_sets_digit_when_given(self, modifier):
         # ARRANGE
-        grid = Mock()
-        modifier = GridModifier(grid)
+        cell_digit = Mock(CellDigit, digit=7, cell=Mock(Cell))
+        deduction = Mock(Deduction, assignment=cell_digit, eliminations=[])
 
-        # ACT
-        mask = modifier._get_candidate_mask(digits)
+        with patch.object(modifier, "write_digit") as write_digit:
+            # ACT
+            modifier.apply(deduction)
 
-        # ASSERT
-        assert mask == expected_mask
+            # ASSERT
+            write_digit.assert_called_once_with(7, cell_digit.cell)
 
-    def test_remove_candidate_removes_a_candidate(self):
+    def test_apply_removes_candidates_when_eliminations_are_given(self, modifier):
         # ARRANGE
-        cell = Cell(6, 5)
+        elimination_1 = Mock(CellDigit, digit=2, cell=Mock(Cell))
+        elimination_2 = Mock(CellDigit, digit=5, cell=Mock(Cell))
 
-        grid = GridState.create_empty()
-        grid._candidates[cell.index] = 0b110011001
-        modifier = GridModifier(grid)
-
-        # ACT
-        modifier.remove_candidate(4, cell)
-
-        # ASSERT
-        assert grid.candidates(cell) == 0b110010001
-
-    def test_remove_candidates_removes_multiple_candidates(self):
-        # ARRANGE
-        cell = Cell(4, 4)
-
-        grid = GridState.create_empty()
-        grid._candidates[cell.index] = ALL_DIGITS
-        modifier = GridModifier(grid)
-
-        # ACT
-        modifier.remove_candidates((5, 6, 7), cell)
-
-        # ASSERT
-        assert grid._candidates[cell.index] == 0b110001111
-
-    def test_add_candidate_adds_a_candidate(self):
-        # ARRANGE
-        cell = Cell(6, 5)
-
-        grid = GridState.create_empty()
-        grid._candidates[cell.index] = 0b110011001
-        modifier = GridModifier(grid)
-
-        # ACT
-        modifier.add_candidate(7, cell)
-
-        # ASSERT
-        assert grid.candidates(cell) == 0b111011001
-
-    def test_add_candidates_adds_multiple_candidates(self):
-        # ARRANGE
-        cell = Cell(4, 4)
-
-        grid = GridState.create_empty()
-        modifier = GridModifier(grid)
-
-        # ACT
-        modifier.add_candidates((5, 6, 7), cell)
-
-        # ASSERT
-        assert grid._candidates[cell.index] == 0b001110000
-
-    def test_apply_with_a_digit_deduction_adds_the_digit(self):
-        # ARRANGE
-        cell = Cell(7, 1)
-        digit = 3
-        deduction = Deduction(
-            "strategy", "explanation", assignment=CellDigit(cell, digit)
+        deduction = Mock(
+            Deduction, assignment=None, eliminations=[elimination_1, elimination_2]
         )
 
-        grid = GridState.create_empty()
-        modifier = GridModifier(grid)
+        with patch.object(modifier, "remove_candidate") as remove_candidate:
+            # ACT
+            modifier.apply(deduction)
 
-        # ACT
-        modifier.apply(deduction)
+            # ASSERT
+            remove_candidate.assert_any_call(elimination_1.digit, elimination_1.cell)
+            remove_candidate.assert_any_call(elimination_2.digit, elimination_2.cell)
+            assert remove_candidate.call_count == 2
 
-        # Assert
-        assert grid._digits[cell.index] == digit
-
-    def test_apply_elimination_deduction_with_one_elimination(self):
+    def test_compute_candidates_initialises_filled_cells_as_empty(
+        self, modifier, state, cell_groups
+    ):
         # ARRANGE
-        cell = Cell(2, 7)
-        deduction = Deduction("", "", eliminations=[CellDigit(cell, 5)])
+        cell = Mock(Cell, index=10)
+        cell_groups.filled_cells.return_value = [cell]
+        cell_groups.empty_cells.return_value = []
 
-        grid = GridState.create_empty()
-        grid._candidates[cell.index] = ALL_DIGITS
-        modifier = GridModifier(grid)
+        empty_candidates = MagicMock(CellCandidates)
 
-        # ACT
-        modifier.apply(deduction)
+        with (
+            patch(
+                "sudoku_strategy.grid.modifier.CellCandidates.empty",
+                return_value=empty_candidates,
+            ),
+            patch.object(modifier, "update_candidates"),
+        ):
+            # ACT
+            modifier.compute_candidates()
 
         # ASSERT
-        assert grid.candidates(cell) == 0b111101111
+        assert state.cell_candidates[cell.index] is empty_candidates
 
-    def test_apply_elimination_deduction_with_multiple_eliminations(self):
+    def test_compute_candidates_initialises_empty_cells_with_all_candidates(
+        self, modifier, state, cell_groups
+    ):
         # ARRANGE
-        cell_1 = Cell(2, 7)
-        cell_2 = Cell(1, 8)
-        eliminations = [
-            CellDigit(cell_1, 1),
-            CellDigit(cell_1, 2),
-            CellDigit(cell_1, 3),
-            CellDigit(cell_2, 8),
-        ]
-        deduction = Deduction("", "", eliminations=eliminations)
+        cell = Mock(Cell, index=10)
+        cell_groups.filled_cells.return_value = []
+        cell_groups.empty_cells.return_value = [cell]
 
-        grid = GridState.create_empty()
-        grid._candidates = [ALL_DIGITS] * 81
-        modifier = GridModifier(grid)
+        all_candidates = MagicMock(CellCandidates)
 
-        # ACT
-        modifier.apply(deduction)
+        with patch(
+            "sudoku_strategy.grid.modifier.CellCandidates.with_all",
+            return_value=all_candidates,
+        ):
+            # ACT
+            modifier.compute_candidates()
 
         # ASSERT
-        assert grid.candidates(cell_1) == 0b111111000
-        assert grid.candidates(cell_2) == 0b101111111
+        assert state.cell_candidates[cell.index] is all_candidates
 
-    def test_compute_candidates_on_an_empty_grid_gives_all_candidates(self):
+    def test_compute_candidates_updates_candidates_for_filled_cells(
+        self, modifier, state, cell_groups
+    ):
         # ARRANGE
-        grid = GridState.create_empty()
-        modifier = GridModifier(grid)
+        cell = Mock(Cell, index=10)
+        state.digits[cell.index] = 3
+        cell_groups.filled_cells.return_value = [cell]
+        cell_groups.empty_cells.return_value = []
 
-        # ACT
-        modifier.compute_candidates()
+        with patch.object(modifier, "update_candidates") as update_candidates:
+            # ACT
+            modifier.compute_candidates()
 
         # ASSERT
-        assert all(candidates == ALL_DIGITS for candidates in grid._candidates)
+        update_candidates.assert_called_once_with(3, cell)
 
-    def test_compute_candidates_sets_candidates_to_none_in_cells_with_digits(self):
+    def test_reset_restores_digits(self, modifier, state):
         # ARRANGE
-        cell = Cell(5, 5)
-        grid = GridState.create_empty()
-        grid.write_digit(cell, 4)
-        modifier = GridModifier(grid)
+        state.puzzle_digits = [1, 2, 3] + [None] * 78
+        state.digits = [9] * 81
 
         # ACT
-        modifier.compute_candidates()
+        modifier.reset()
 
         # ASSERT
-        assert grid.candidates(cell) == 0
+        assert state.digits == state.puzzle_digits
 
-    def test_compute_candidates_removes_candidate_from_peers(self):
+    def test_reset_sets_all_cell_candidates_to_empty(self, modifier, state):
         # ARRANGE
-        cell = Cell(4, 4)
-        grid = GridState.create_empty()
-        grid.write_digit(cell, 4)
-        modifier = GridModifier(grid)
+        empty_candidates = MagicMock(CellCandidates)
 
-        peers = [Cell(0, 4), Cell(4, 0), Cell(5, 5)]
+        with patch(
+            "sudoku_strategy.grid.modifier.CellCandidates.empty",
+            return_value=empty_candidates,
+        ) as empty:
+            # ACT
+            modifier.reset()
 
-        # ACT
-        modifier.compute_candidates()
+            # ASSERT
+            assert state.cell_candidates == [empty_candidates] * 81
+            assert empty.call_count == 81
 
-        # ASSERT
-        assert all(grid.candidates(cell) == 0b111110111 for cell in peers)
-
-    def test_compute_candidates_removes_multiple_candidates_from_cell(self):
+    def test_reset_sets_all_value_candidates_to_empty(self, modifier, state):
         # ARRANGE
-        cell = Cell(5, 5)
-        grid = GridState.create_empty()
-        grid.write_digit(Cell(0, 5), 1)
-        grid.write_digit(Cell(5, 0), 2)
-        modifier = GridModifier(grid)
+        empty_candidates = MagicMock(CellCandidates)
 
+        with patch(
+            "sudoku_strategy.grid.modifier.Cells",
+            return_value=empty_candidates,
+        ) as empty:
+            # ACT
+            modifier.reset()
+
+            # ASSERT
+            assert state.value_candidates == [empty_candidates] * 10
+            assert empty.call_count == 10
+
+    def test_reset_updates_filled_cells(self, modifier, state):
         # ACT
-        modifier.compute_candidates()
+        modifier.reset()
 
         # ASSERT
-        assert grid.candidates(cell) == 0b111111100
+        state.fill_filled_cells.assert_called_once()

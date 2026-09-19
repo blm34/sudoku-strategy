@@ -1,234 +1,198 @@
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, call
 
+import pytest
+
+from sudoku_strategy.grid import CellGroups, Grid, GridAnalysis, GridModifier, GridState
 from sudoku_strategy.solver.solver import Solver
+from sudoku_strategy.strategy import Deduction
+from sudoku_strategy.strategy.abs_strategy import AbsStrategy
 
 
 class TestSolver:
-    def test_find_next_returns_deduction_from_first_strategy(self):
+    @pytest.fixture
+    def state(self):
+        return Mock(GridState)
+
+    @pytest.fixture
+    def cell_groups(self, state):
+        cell_groups = Mock(CellGroups)
+        cell_groups._state = state
+        return cell_groups
+
+    @pytest.fixture
+    def analysis(self, state, cell_groups):
+        analysis = Mock(GridAnalysis)
+        analysis._state = state
+        analysis.cell_groups = cell_groups
+        return analysis
+
+    @pytest.fixture
+    def modifier(self, state, cell_groups):
+        modifier = Mock(GridModifier)
+        modifier._state = state
+        modifier._cell_groups = cell_groups
+        return modifier
+
+    @pytest.fixture
+    def grid(self, analysis, modifier, state):
+        grid = Mock(Grid)
+        grid._state = state
+        grid.modify = modifier
+        grid.analyse = analysis
+        return grid
+
+    def test_find_next_returns_deduction_from_first_strategy(self, grid, analysis):
         # ARRANGE
-        grid = Mock()
-        analysis = Mock()
+        first_strategy = Mock(AbsStrategy)
+        second_strategy = Mock(AbsStrategy)
 
-        first_strategy = Mock()
-        second_strategy = Mock()
-
-        deduction = Mock()
+        deduction = Mock(Deduction)
 
         first_strategy.find.return_value = deduction
 
-        with patch("sudoku_strategy.solver.solver.GridAnalysis", return_value=analysis):
-            solver = Solver(strategies=(first_strategy, second_strategy))
+        solver = Solver(strategies=(first_strategy, second_strategy))
 
-            # ACT
-            result = solver.find_next(grid)
+        # ACT
+        result = solver.find_next(grid)
 
-            # ASSERT
-            assert result is deduction
-            first_strategy.find.assert_called_once_with(analysis)
-            second_strategy.find.assert_not_called()
+        # ASSERT
+        assert result is deduction
+        first_strategy.find.assert_called_once_with(analysis)
+        second_strategy.find.assert_not_called()
 
-    def test_find_next_tries_next_strategy_when_first_finds_nothing(self):
+    def test_find_next_tries_next_strategy_when_first_finds_nothing(
+        self, grid, analysis
+    ):
         # ARRANGE
-        grid = Mock()
-        analysis = Mock()
+        first_strategy = Mock(AbsStrategy)
+        second_strategy = Mock(AbsStrategy)
 
-        first_strategy = Mock()
-        second_strategy = Mock()
-
-        deduction = Mock()
+        deduction = Mock(Deduction)
 
         first_strategy.find.return_value = None
         second_strategy.find.return_value = deduction
 
-        with patch("sudoku_strategy.solver.solver.GridAnalysis", return_value=analysis):
-            solver = Solver(strategies=(first_strategy, second_strategy))
+        solver = Solver(strategies=(first_strategy, second_strategy))
 
-            # ACT
-            result = solver.find_next(grid)
+        # ACT
+        result = solver.find_next(grid)
 
-            # ASSERT
-            assert result is deduction
+        # ASSERT
+        assert result is deduction
 
-            first_strategy.find.assert_called_once_with(analysis)
-            second_strategy.find.assert_called_once_with(analysis)
+        first_strategy.find.assert_called_once_with(analysis)
+        second_strategy.find.assert_called_once_with(analysis)
 
-    def test_find_next_returns_none_when_no_strategy_finds_deduction(self):
+    def test_find_next_returns_none_when_no_strategy_finds_deduction(
+        self, grid, analysis
+    ):
         # ARRANGE
-        grid = Mock()
-        analysis = Mock()
-
-        first_strategy = Mock()
-        second_strategy = Mock()
+        first_strategy = Mock(AbsStrategy)
+        second_strategy = Mock(AbsStrategy)
 
         first_strategy.find.return_value = None
         second_strategy.find.return_value = None
 
-        with patch("sudoku_strategy.solver.solver.GridAnalysis", return_value=analysis):
-            solver = Solver(strategies=(first_strategy, second_strategy))
+        solver = Solver(strategies=(first_strategy, second_strategy))
 
-            # ACT
-            result = solver.find_next(grid)
+        # ACT
+        result = solver.find_next(grid)
 
-            # ASSERT
-            assert result is None
+        # ASSERT
+        assert result is None
 
-            first_strategy.find.assert_called_once_with(analysis)
-            second_strategy.find.assert_called_once_with(analysis)
+        first_strategy.find.assert_called_once_with(analysis)
+        second_strategy.find.assert_called_once_with(analysis)
 
-    def test_find_next_creates_analysis_for_grid(self):
+    def test_solve_uses_copy_of_grid(self, grid):
         # ARRANGE
-        grid = Mock()
-        analysis = Mock()
-        strategy = Mock()
-
-        strategy.find.return_value = Mock()
-
-        with patch(
-            "sudoku_strategy.solver.solver.GridAnalysis",
-            return_value=analysis,
-        ) as analysis_class:
-            solver = Solver(strategies=(strategy,))
-
-            # ACT
-            solver.find_next(grid)
-
-            # ASSERT
-            analysis_class.assert_called_once_with(grid)
-
-    def test_solve_uses_copy_of_grid(self):
-        # ARRANGE
-        grid = Mock()
-        working_grid = Mock()
+        working_grid = Mock(Grid)
+        working_analysis = Mock(GridAnalysis)
+        working_grid.analyse = working_analysis
 
         grid.copy.return_value = working_grid
-        working_grid.is_complete.side_effect = [True]
+        working_analysis.is_complete.side_effect = [True]
 
-        with patch("sudoku_strategy.solver.solver.GridModifier") as modifier_class:
-            solver = Solver()
+        solver = Solver()
 
-            # ACT
-            result = solver.solve(grid)
+        # ACT
+        result = solver.solve(grid)
 
-            # ASSERT
-            grid.copy.assert_called_once()
-            modifier_class.assert_called_once_with(working_grid)
-            assert result == []
+        # ASSERT
+        grid.copy.assert_called_once()
+        working_analysis.is_complete.assert_called_once()
+        assert result == []
 
-    def test_solve_finds_and_applies_deductions(self):
+    def test_solve_finds_and_applies_deductions(self, grid, modifier):
         # ARRANGE
-        grid = Mock()
-        working_grid = Mock()
+        grid.copy.return_value = grid
 
-        grid.copy.return_value = working_grid
+        deduction = Mock(Deduction)
 
-        deduction = Mock()
+        grid.analyse.is_complete.side_effect = [False, True]
 
-        working_grid.is_complete.side_effect = [False, True]
+        solver = Solver()
+        solver.find_next = Mock(side_effect=[deduction])
 
-        with (
-            patch.object(
-                Solver,
-                "find_next",
-                side_effect=[deduction],
-            ),
-            patch("sudoku_strategy.solver.solver.GridModifier") as modifier_class,
-        ):
-            modifier = modifier_class.return_value
+        # ACT
+        result = solver.solve(grid)
 
-            solver = Solver()
+        # ASSERT
+        assert result == [deduction]
 
-            # ACT
-            result = solver.solve(grid)
+        grid.copy.assert_called_once()
+        modifier.apply.assert_called_once_with(deduction)
 
-            # ASSERT
-            assert result == [deduction]
-
-            grid.copy.assert_called_once()
-            modifier_class.assert_called_once_with(working_grid)
-            modifier.apply.assert_called_once_with(deduction)
-
-    def test_solve_finds_and_applies_multiple_deductions(self):
+    def test_solve_finds_and_applies_multiple_deductions(self, grid, modifier):
         # ARRANGE
-        grid = Mock()
-        working_grid = Mock()
+        grid.copy.return_value = grid
 
-        grid.copy.return_value = working_grid
+        first_deduction = Mock(Deduction)
+        second_deduction = Mock(Deduction)
 
-        first_deduction = Mock()
-        second_deduction = Mock()
+        grid.analyse.is_complete.side_effect = [False, False, True]
 
-        working_grid.is_complete.side_effect = [False, False, True]
+        solver = Solver()
+        solver.find_next = Mock(side_effect=[first_deduction, second_deduction])
 
-        with (
-            patch.object(
-                Solver,
-                "find_next",
-                side_effect=[first_deduction, second_deduction],
-            ),
-            patch("sudoku_strategy.solver.solver.GridModifier") as modifier_class,
-        ):
-            modifier = modifier_class.return_value
+        # ACT
+        result = solver.solve(grid)
 
-            solver = Solver()
+        # ASSERT
+        assert result == [
+            first_deduction,
+            second_deduction,
+        ]
 
-            # ACT
-            result = solver.solve(grid)
+        assert modifier.apply.call_args_list == [
+            call(first_deduction),
+            call(second_deduction),
+        ]
 
-            # ASSERT
-            assert result == [
-                first_deduction,
-                second_deduction,
-            ]
-
-            assert modifier.apply.call_args_list == [
-                call(first_deduction),
-                call(second_deduction),
-            ]
-
-    def test_solve_stops_when_no_deduction_is_found(self):
+    def test_solve_stops_when_no_deduction_is_found(self, grid):
         # ARRANGE
-        grid = Mock()
-        working_grid = Mock()
+        grid.copy.return_value = grid
+        grid.analyse.is_complete.return_value = False
 
-        grid.copy.return_value = working_grid
-        working_grid.is_complete.return_value = False
+        solver = Solver()
+        solver.find_next = Mock(return_value=None)
 
-        with (
-            patch.object(
-                Solver,
-                "find_next",
-                return_value=None,
-            ),
-            patch("sudoku_strategy.solver.solver.GridModifier"),
-        ):
-            solver = Solver()
+        # ACT
+        result = solver.solve(grid)
 
-            # ACT
-            result = solver.solve(grid)
+        # ASSERT
+        assert result == []
 
-            # ASSERT
-            assert result == []
-
-    def test_solve_logs_warning_when_no_deduction_is_found(self, caplog):
+    def test_solve_logs_warning_when_no_deduction_is_found(self, grid, caplog):
         # ARRANGE
-        grid = Mock()
-        working_grid = Mock()
+        grid.copy.return_value = grid
+        grid.analyse.is_complete.return_value = False
 
-        grid.copy.return_value = working_grid
-        working_grid.is_complete.return_value = False
+        solver = Solver()
+        solver.find_next = Mock(return_value=None)
 
-        with (
-            patch.object(
-                Solver,
-                "find_next",
-                return_value=None,
-            ),
-            patch("sudoku_strategy.solver.solver.GridModifier"),
-        ):
-            solver = Solver()
+        # ACT
+        solver.solve(grid)
 
-            # ACT
-            solver.solve(grid)
-
-            # ASSERT
-            assert "No next step found for puzzle." in caplog.text
+        # ASSERT
+        assert "No next step found for puzzle." in caplog.text

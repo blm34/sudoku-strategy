@@ -1,34 +1,54 @@
+from unittest.mock import Mock
+
 import pytest
 
-from sudoku_strategy.grid.cell import Cell
+from sudoku_strategy.grid import CellCandidates
 from sudoku_strategy.grid.state import GridState
-from sudoku_strategy.grid.utils import ALL_DIGITS, digit_mask
 
 
 class TestGridState:
+    @pytest.fixture
+    def state(self):
+        return GridState.create_empty()
+
     def test_create_empty_initialises_empty_grid_of_digits(self):
         # ACT
         grid = GridState.create_empty()
 
         # ASSERT
-        assert len(grid._digits) == 81
-        assert all(digit == 0 for digit in grid._digits)
+        assert len(grid.digits) == 81
+        assert all(digit == 0 for digit in grid.digits)
 
-    def test_create_empty_initialises_empty_grid_of_candidates(self):
+    def test_create_empty_initialises_empty_grid_of_cell_candidates(self):
         # ACT
         grid = GridState.create_empty()
 
         # ASSERT
-        assert len(grid._candidates) == 81
-        assert all(candidates == 0 for candidates in grid._candidates)
+        assert len(grid.cell_candidates) == 81
+        assert all(len(candidates) == 0 for candidates in grid.cell_candidates)
+
+    def test_create_empty_initialises_empty_grid_of_value_candidates(self):
+        # ACT
+        grid = GridState.create_empty()
+
+        # ASSERT
+        assert len(grid.value_candidates) == 10
+        assert all(len(cells) == 0 for cells in grid.value_candidates)
 
     def test_create_empty_initialises_empty_grid_of_puzzle_digits(self):
         # ACT
         grid = GridState.create_empty()
 
         # ASSERT
-        assert len(grid._puzzle_digits) == 81
-        assert all(digit == 0 for digit in grid._puzzle_digits)
+        assert len(grid.puzzle_digits) == 81
+        assert all(digit == 0 for digit in grid.puzzle_digits)
+
+    def test_create_empty_initialises_with_no_filled_cells(self):
+        # ACT
+        grid = GridState.create_empty()
+
+        # ASSERT
+        assert grid.filled_cells._mask == 0
 
     def test_new_puzzle_adds_digits_to_digits(self):
         # ARRANGE
@@ -40,8 +60,8 @@ class TestGridState:
         grid = GridState.new_puzzle(digits)
 
         # ASSERT
-        assert grid._digits.count(0) == 80
-        assert grid._digits[8] == 1
+        assert grid.digits.count(0) == 80
+        assert grid.digits[8] == 1
 
     def test_new_puzzle_sets_all_candidates_to_zero(self):
         # ARRANGE
@@ -51,8 +71,8 @@ class TestGridState:
         grid = GridState.new_puzzle(digits)
 
         # ASSERT
-        assert len(grid._candidates) == 81
-        assert all(candidates == 0 for candidates in grid._candidates)
+        assert all(len(candidates) == 0 for candidates in grid.cell_candidates)
+        assert all(len(cells) == 0 for cells in grid.value_candidates)
 
     def test_new_puzzle_sets_puzzle_digits_correctly(self):
         # ARRANGE
@@ -64,8 +84,8 @@ class TestGridState:
         grid = GridState.new_puzzle(digits)
 
         # ASSERT
-        assert grid._puzzle_digits.count(0) == 80
-        assert grid._puzzle_digits[8] == 1
+        assert grid.puzzle_digits.count(0) == 80
+        assert grid.puzzle_digits[8] == 1
 
     @pytest.mark.parametrize("length", (10, 80, 82, 100))
     def test_new_puzzle_raises_error_when_given_wrong_number_of_digits(self, length):
@@ -76,235 +96,88 @@ class TestGridState:
             # ACT
             GridState.new_puzzle(digits)
 
-    def test_digit_returns_digit_in_given_cell(self):
+    def test_copy_returns_same_digits(self, state):
         # ARRANGE
-        grid = GridState.create_empty()
-        idx = 5
-        cell = Cell.from_index(idx)
-        grid._digits[idx] = 9
+        mock_digits = list(range(81))
+        state.digits = mock_digits
 
         # ACT
-        digit = grid.digit(cell)
+        copy = state.copy()
 
         # ASSERT
-        assert digit == 9
+        assert copy.digits == mock_digits
 
-    def test_write_digit_adds_digit_to_array(self):
+    def test_copy_returns_same_candidates(self, state):
         # ARRANGE
-        grid = GridState.create_empty()
-        idx = 5
-        cell = Cell.from_index(idx)
-        digit = 1
+        candidate = Mock(CellCandidates)
+        candidate.__iter__ = lambda _: iter(range(9))
+        state.cell_candidates = [candidate]  # type: ignore[reportAttributeAccessIssue]
 
         # ACT
-        grid.write_digit(cell, digit)
+        copy = state.copy()
 
         # ASSERT
-        assert grid._digits[idx] == digit
+        assert copy.cell_candidates == [candidate]
 
-    def test_puzzle_digit_returns_value_of_original_puzzle(self):
+    def test_copy_returns_same_puzzle_digits(self, state):
         # ARRANGE
-        cell_idx = 4
-        cell = Cell.from_index(cell_idx)
-
-        puzzle_digits = [0] * 81
-        puzzle_digits[cell_idx] = 3
-        puzzle_digits = tuple(puzzle_digits)
-
-        grid = GridState.new_puzzle(puzzle_digits)
-        grid._digits[cell_idx] = 5
+        puzzle_digits = tuple(range(81))
+        state.puzzle_digits = puzzle_digits
 
         # ACT
-        puzzle_digit = grid.puzzle_digit(cell)
+        copy = state.copy()
 
         # ASSERT
-        assert puzzle_digit == 3
+        assert copy.puzzle_digits == puzzle_digits
 
-    def test_candidates_returns_mask_for_given_cell(self):
+    def test_copy_has_independent_digits(self, state):
         # ARRANGE
-        grid = GridState.create_empty()
-        idx = 5
-        cell = Cell.from_index(idx)
-        set_candidates = 0b001100110
-        grid._candidates[idx] = set_candidates
+        mock_digits = list(range(81))
+        state.digits = mock_digits
 
         # ACT
-        candidates = grid.candidates(cell)
+        copy = state.copy()
 
         # ASSERT
-        assert candidates == set_candidates
+        assert copy.digits is not mock_digits
 
-    def test_add_candidates_stores_new_candidates(self):
+    def test_copy_has_independent_candidates(self, state):
         # ARRANGE
-        digits = [0] * 81
-        candidates = [0] * 81
-        grid = GridState(digits, candidates, tuple(digits))
-
-        idx = 17
-        cell = Cell.from_index(idx)
-
-        mask = digit_mask(6)
+        candidate = Mock(CellCandidates)
+        candidate.__iter__ = lambda _: iter(range(9))
+        state.cell_candidates = [candidate]  # type: ignore[reportAttributeAccessIssue]
 
         # ACT
-        grid.add_candidates(cell, mask)
+        copy = state.copy()
 
         # ASSERT
-        assert grid._candidates[idx] == mask
+        assert copy.cell_candidates is not state.cell_candidates
 
-    def test_eliminate_candidates_removes_new_candidates(self):
+    def test_fill_value_candidates_adds_candidates_for_correct_digit(self, state):
         # ARRANGE
-        grid = GridState.create_empty()
-        grid._candidates = [ALL_DIGITS] * 81
-
-        idx = 17
-        cell = Cell.from_index(idx)
-
-        elimination_mask = 0b000100100
-        expected = 0b111011011
+        mock_candidate = Mock(CellCandidates)
+        digit = 5
+        mock_candidate.__iter__ = lambda _: iter([digit])
+        cell_index = 7
+        state.cell_candidates[cell_index] = mock_candidate
 
         # ACT
-        grid.eliminate_candidates(cell, elimination_mask)
+        state.fill_value_candidates()
 
         # ASSERT
-        assert grid._candidates[idx] == expected
+        assert state.value_candidates[digit]._mask == 1 << cell_index
 
-    def test_is_complete_on_empty_grid_is_false(self):
+    def test_fill_filled_cells_contains_correct_cells(self, state):
         # ARRANGE
-        grid = GridState.create_empty()
+        state.digits[5] = 1
+        state.digits[20] = 7
+        state.digits[59] = 4
 
         # ACT
-        complete = grid.is_complete()
+        state.fill_filled_cells()
 
         # ASSERT
-        assert not complete
-
-    def test_is_complete_on_a_parial_grid_is_false(self):
-        # ARRANGE
-        grid = GridState.create_empty()
-        for i in range(0, 81, 4):
-            grid._digits[i] = (i % 9) + 1
-
-        # ACT
-        complete = grid.is_complete()
-
-        # ASSERT
-        assert not complete
-
-    def test_is_complete_on_a_complete_grid_is_true(self):
-        # ARRANGE
-        grid = GridState.create_empty()
-        for i in range(81):
-            grid._digits[i] = (i % 9) + 1
-
-        # ACT
-        complete = grid.is_complete()
-
-        # ASSERT
-        assert complete
-
-    def test_cell_empty_on_an_empty_cell(self):
-        # ARRANGE
-        grid = GridState.create_empty()
-        cell = Cell(5, 5)
-
-        # ACT
-        empty = grid.cell_empty(cell)
-
-        # ASSERT
-        assert empty
-
-    def test_cell_empty_on_an_filled_cell(self):
-        # ARRANGE
-        grid = GridState.create_empty()
-        cell = Cell(5, 5)
-        grid._digits[cell.index] = 5
-
-        # ACT
-        empty = grid.cell_empty(cell)
-
-        # ASSERT
-        assert not empty
-
-    def test_copy_returns_same_digits_and_candidates(self):
-        # ARRANGE
-        grid = GridState.create_empty()
-        grid._candidates = [ALL_DIGITS] * 81
-
-        grid.write_digit(Cell(0, 0), 5)
-        grid.eliminate_candidates(Cell(1, 1), 0b000001000)
-
-        # ACT
-        copy = grid.copy()
-
-        # ASSERT
-        assert copy.digit(Cell(0, 0)) == 5
-        assert copy.candidates(Cell(1, 1)) == 0b111110111
-
-        assert copy._candidates == grid._candidates
-        assert copy._digits == grid._digits
-
-    def test_copy_has_independent_digits(self):
-        # ARRANGE
-        grid = GridState.create_empty()
-        grid.write_digit(Cell(0, 0), 5)
-
-        # ACT
-        copy = grid.copy()
-        copy.write_digit(Cell(0, 0), 7)
-
-        # ASSERT
-        assert copy.digit(Cell(0, 0)) == 7
-        assert grid.digit(Cell(0, 0)) == 5
-
-    def test_copy_has_independent_candidates(self):
-        # ARRANGE
-        grid = GridState.create_empty()
-        grid._candidates = [ALL_DIGITS] * 81
-        cell = Cell(0, 0)
-
-        # ACT
-        copy = grid.copy()
-        copy.eliminate_candidates(cell, 0b000001000)
-
-        # ASSERT
-        assert copy.candidates(cell) != grid.candidates(cell)
-        assert grid.candidates(cell) == ALL_DIGITS
-
-    def test_changes_to_original_do_not_affect_copy(self):
-        # ARRANGE
-        grid = GridState.create_empty()
-        grid._candidates = [ALL_DIGITS] * 81
-        copy = grid.copy()
-
-        # ACT
-        grid.write_digit(Cell(0, 0), 5)
-        grid.eliminate_candidates(Cell(1, 1), 1 << 4)
-
-        # ASSERT
-        assert copy.digit(Cell(0, 0)) == 0
-        assert copy.candidates(Cell(1, 1)) == ALL_DIGITS
-
-    def test_reset_clears_user_entered_digits(self):
-        # ARRANGE
-        puzzle_digits = (1,) * 81
-        grid = GridState.new_puzzle(puzzle_digits)
-        grid._digits = [2] * 81
-
-        # ACT
-        grid.reset()
-
-        # ASSERT
-        assert len(grid._digits) == 81
-        assert all(digit == 1 for digit in grid._digits)
-
-    def test_reset_sets_all_candidates_to_zero(self):
-        # ARRANGE
-        grid = GridState.create_empty()
-        grid._candidates = [ALL_DIGITS] * 81
-
-        # ACT
-        grid.reset()
-
-        # ASSERT
-        assert len(grid._candidates) == 81
-        assert all(candidate == 0 for candidate in grid._candidates)
+        filled = state.filled_cells
+        assert filled._mask & 1 << 5
+        assert filled._mask & 1 << 20
+        assert filled._mask & 1 << 59

@@ -1,136 +1,135 @@
 import json
 from io import StringIO
 
-from sudoku_strategy.grid import Cell, GridModifier, GridState
+import pytest
+
+from sudoku_strategy.grid import Cell, CellCandidates, Grid, GridState
 from sudoku_strategy.persistance.writers.json import JsonWriter
 
 
-def test_writes_puzzle_digits():
-    # ARRANGE
-    puzzle_digits = [1, 2, 3] + [0] * 78
-    grid = GridState.new_puzzle(tuple(puzzle_digits))
-    stream = StringIO()
+class TestJsonWriter:
+    @pytest.fixture
+    def writer(self):
+        return JsonWriter()
 
-    writer = JsonWriter()
+    def test_writes_puzzle_digits(self, writer):
+        # ARRANGE
+        puzzle_digits = [1, 2, 3] + [0] * 78
+        state = GridState.new_puzzle(tuple(puzzle_digits))
+        grid = Grid.from_state(state)
 
-    # ACT
-    writer.write(grid, stream)
+        stream = StringIO()
 
-    # ASSERT
-    grid_dict = json.loads(stream.getvalue())
+        # ACT
+        writer.write(grid, stream)
 
-    assert grid_dict["puzzle_digits"] == puzzle_digits
+        # ASSERT
+        grid_dict = json.loads(stream.getvalue())
 
+        assert grid_dict["puzzle_digits"] == puzzle_digits
 
-def test_writes_digits_into_correct_cells():
-    # ARRANGE
-    grid = GridState.create_empty()
-    modifier = GridModifier(grid)
+    def test_writes_digits_into_correct_cells(self, writer):
+        # ARRANGE
+        state = GridState.create_empty()
+        grid = Grid.from_state(state)
 
-    modifier.write_digit(1, Cell(0, 0))
-    modifier.write_digit(5, Cell(4, 4))
-    modifier.write_digit(9, Cell(8, 8))
+        grid.modify.write_digit(1, Cell(0))
+        grid.modify.write_digit(5, Cell(40))
+        grid.modify.write_digit(9, Cell(80))
 
-    stream = StringIO()
+        stream = StringIO()
 
-    writer = JsonWriter()
+        # ACT
+        writer.write(grid, stream)
 
-    # ACT
-    writer.write(grid, stream)
+        # ASSERT
+        grid_dict = json.loads(stream.getvalue())
 
-    # ASSERT
-    grid_dict = json.loads(stream.getvalue())
+        assert grid_dict["digits"][0] == 1
+        assert grid_dict["digits"][40] == 5
+        assert grid_dict["digits"][80] == 9
 
-    assert grid_dict["digits"][Cell(0, 0).index] == 1
-    assert grid_dict["digits"][Cell(4, 4).index] == 5
-    assert grid_dict["digits"][Cell(8, 8).index] == 9
+    def test_writes_empty_digits_as_zero(self, writer):
+        # ARRANGE
+        state = GridState.create_empty()
+        grid = Grid.from_state(state)
+        stream = StringIO()
 
+        # ACT
+        writer.write(grid, stream)
 
-def test_writes_empty_digits_as_zero():
-    # ARRANGE
-    grid = GridState.create_empty()
-    stream = StringIO()
+        # ASSERT
+        grid_dict = json.loads(stream.getvalue())
 
-    writer = JsonWriter()
+        assert all(digit == 0 for digit in grid_dict["digits"])
 
-    # ACT
-    writer.write(grid, stream)
+    def test_writes_candidate_digits_into_correct_cells(self, writer):
+        # ARRANGE
+        state = GridState.create_empty()
+        state.cell_candidates[0] = CellCandidates(0b000000111)
+        state.cell_candidates[40] = CellCandidates(0b000111000)
+        state.cell_candidates[80] = CellCandidates(0b111000000)
 
-    # ASSERT
-    grid_dict = json.loads(stream.getvalue())
+        grid = Grid.from_state(state)
 
-    assert all(digit == 0 for digit in grid_dict["digits"])
+        stream = StringIO()
 
+        # ACT
+        writer.write(grid, stream)
 
-def test_writes_candidate_digits_into_correct_cells():
-    # ARRANGE
-    grid = GridState.create_empty()
-    grid._candidates[Cell(0, 0).index] = 0b000000111
-    grid._candidates[Cell(4, 4).index] = 0b000111000
-    grid._candidates[Cell(8, 8).index] = 0b111000000
+        # ASSERT
+        grid_dict = json.loads(stream.getvalue())
 
-    stream = StringIO()
+        assert grid_dict["candidate_values"][0] == [1, 2, 3]
+        assert grid_dict["candidate_values"][40] == [4, 5, 6]
+        assert grid_dict["candidate_values"][80] == [7, 8, 9]
 
-    writer = JsonWriter()
+    def test_writes_empty_candidate_values_as_empty_lists(self, writer):
+        # ARRANGE
+        state = GridState.create_empty()
+        grid = Grid.from_state(state)
 
-    # ACT
-    writer.write(grid, stream)
+        stream = StringIO()
 
-    # ASSERT
-    grid_dict = json.loads(stream.getvalue())
+        # ACT
+        writer.write(grid, stream)
 
-    assert grid_dict["candidate_values"][Cell(0, 0).index] == [1, 2, 3]
-    assert grid_dict["candidate_values"][Cell(4, 4).index] == [4, 5, 6]
-    assert grid_dict["candidate_values"][Cell(8, 8).index] == [7, 8, 9]
+        # ASSERT
+        grid_dict = json.loads(stream.getvalue())
 
+        assert all(
+            candidate_list == [] for candidate_list in grid_dict["candidate_values"]
+        )
 
-def test_writes_empty_candidate_values_as_empty_lists():
-    # ARRANGE
-    grid = GridState.create_empty()
-    stream = StringIO()
+    def test_writes_all_grid_data(self, writer):
+        # ARRANGE
+        puzzle_digits = [0] * 81
+        puzzle_digits[0] = 1
+        puzzle_digits[40] = 5
 
-    writer = JsonWriter()
+        state = GridState.new_puzzle(tuple(puzzle_digits))
+        grid = Grid.from_state(state)
 
-    # ACT
-    writer.write(grid, stream)
+        grid.modify.write_digit(2, Cell(1))
+        grid.modify.write_digit(9, Cell(80))
 
-    # ASSERT
-    grid_dict = json.loads(stream.getvalue())
+        grid.modify.add_candidates([3, 4, 5], Cell(10))
+        grid.modify.add_candidates([6, 7, 8], Cell(63))
 
-    assert all(candidate_list == [] for candidate_list in grid_dict["candidate_values"])
+        stream = StringIO()
 
+        # ACT
+        writer.write(grid, stream)
 
-def test_writes_all_grid_data():
-    # ARRANGE
-    puzzle_digits = [0] * 81
-    puzzle_digits[0] = 1
-    puzzle_digits[40] = 5
+        # ASSERT
+        grid_dict = json.loads(stream.getvalue())
 
-    grid = GridState.new_puzzle(tuple(puzzle_digits))
-    modifier = GridModifier(grid)
+        assert grid_dict["puzzle_digits"] == puzzle_digits
 
-    modifier.write_digit(2, Cell(0, 1))
-    modifier.write_digit(9, Cell(8, 8))
+        assert grid_dict["digits"][0] == 1
+        assert grid_dict["digits"][1] == 2
+        assert grid_dict["digits"][40] == 5
+        assert grid_dict["digits"][80] == 9
 
-    modifier.add_candidates([3, 4, 5], Cell(1, 1))
-    modifier.add_candidates([6, 7, 8], Cell(7, 7))
-
-    stream = StringIO()
-
-    writer = JsonWriter()
-
-    # ACT
-    writer.write(grid, stream)
-
-    # ASSERT
-    grid_dict = json.loads(stream.getvalue())
-
-    assert grid_dict["puzzle_digits"] == puzzle_digits
-
-    assert grid_dict["digits"][Cell(0, 0).index] == 1
-    assert grid_dict["digits"][Cell(0, 1).index] == 2
-    assert grid_dict["digits"][Cell(4, 4).index] == 5
-    assert grid_dict["digits"][Cell(8, 8).index] == 9
-
-    assert grid_dict["candidate_values"][Cell(1, 1).index] == [3, 4, 5]
-    assert grid_dict["candidate_values"][Cell(7, 7).index] == [6, 7, 8]
+        assert grid_dict["candidate_values"][10] == [3, 4, 5]
+        assert grid_dict["candidate_values"][63] == [6, 7, 8]

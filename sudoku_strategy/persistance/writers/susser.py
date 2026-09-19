@@ -14,13 +14,15 @@ from .interface import AbsSudokuWriter
 if TYPE_CHECKING:
     from typing import TextIO
 
-    from sudoku_strategy.grid import GridState
+    from sudoku_strategy.grid import Grid
 
 
 class SusserWriter(AbsSudokuWriter):
-    def write(self, grid: GridState, stream: TextIO):
+    def write(self, grid: Grid, stream: TextIO):
         """Write a susser format from a text stream"""
-        for digit in grid._digits:
+        for cell in grid.analyse.cell_groups.cells():
+            digit = grid.analyse.get_digit_in_cell(cell)
+
             if digit == 0:
                 stream.write(".")
             else:

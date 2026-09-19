@@ -30,9 +30,9 @@ class EliminateCandidatesStrategy(AbsStrategy):
         """Find all candidates that can be trivially eliminated."""
         cells = []
 
-        for cell in analysis.iterate.filled_cells():
+        for cell in analysis.cell_groups.filled_cells():
             digit = analysis.get_digit_in_cell(cell)
-            peers = analysis.iterate.peers(cell)
+            peers = analysis.cell_groups.peers(cell)
             eliminatable = analysis.get_cells_with_candidate(peers, digit)
             cells += [CellDigit(cell=cell, digit=digit) for cell in eliminatable]
 

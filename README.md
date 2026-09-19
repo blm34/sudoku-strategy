@@ -26,21 +26,20 @@ pip install sudoku_strategy
 ## Quick Start
 
 ```Python
-from sudoku_strategy import GridState, Solver
-from sudoku_strategy.grid import GridModifier
+from sudoku_strategy import Grid, Solver
+from sudoku_strategy.grid import Cell
 
 # Puzzle digits is an 81 length tuple representing the starting state of the
 # puzzle. `0` is used to represent an empty cell.
 puzzle_digits = (0, 0, 5, 4, 0, ...)
 
-grid = GridState.new_puzzle(puzzle_digits)
+grid = Grid.new_puzzle(puzzle_digits)
 
 # Add any user entered digits to the puzzle
-modifier = GridModifier(grid)
-modifier.write_digit(5, Cell(7, 8))
+grid.modify.write_digit(5, Cell.from_position(7, 8))
 
 # Compute all candidates
-modifier.compute_candidates()
+grid.modify.compute_candidates()
 
 # Get the next move
 solver = Solver()
@@ -60,7 +59,7 @@ understand why a move can be made rather than simply being given the answer.
 
 ## Representing a Sudoku
 
-### Cells
+### Grid
 
 A Sudoku consists of 81 cells arranged into:
 
@@ -68,95 +67,97 @@ A Sudoku consists of 81 cells arranged into:
 * 9 columns
 * 9 boxes
 
-Cells are represented using zero-based row and column coordinates:
+Each cell can contain one digit, or a number of candidates.
+
+#### Cell
+
+A Cell is represented using an index from 0-80 starting in the top left cell,
+then working along each row to cell 80 in the bottom right. Properties are
+available to get the row, column and box of the cell. These are all zero
+indexed.
 
 ```Python
 from sudoku_strategy import Cell
 
-cell = Cell(row=3, col=6)
+cell = Cell(33)
+
+idx = row.index  # index = 33
+row = cell.row  # row = 3
+col = cell.col  # col = 6
+box = cell.box  # box = 5
 ```
 
 This corresponds to `R4C7` when displayed using the conventional one-based
 Sudoku notation.
 
-Cells can also be created from their zero-based position in the grid with zero
-being the top left cell, counting along each row, with cell 80 being in the
-bottom right:
+Cells can also be created from their (row, column) position in the grid 
 
 ```Python
-cell = Cell.from_index(33)
+cell = Cell.from_position(3, 6)
 ```
 
-### Grid
+#### Cell Candidates
 
-`GridState` represents the current state of a Sudoku puzzle. It stores:
-
-* Puzzle's initial digits
-* Entered digits
-* Candidates for each cell
-
-An empty grid can be created with:
+Cell candidates represent digits that could be placed in a cell. They contain a
+set of numbers from 1-9. They can be created to contain any permutation of
+digits.
 
 ```Python
-from sudoku_strategy import GridState
+from sudoku_strategy.grid import CellCandidates
 
-grid = GridState.create_empty()
+# Create a `CellCandidates` object that contains no candidates
+no_candidates = CellCandidates.empty()
+
+# Create a `CellCandidates` object that contains all 9 candidates
+all_candidates = CellCandidates.with_all()
+
+# Create a `CellCandidates` object containing the given candidates
+candidates = CellCandidates.from_digits([5, 6, 7])
 ```
 
-The state can be queried:
+Cell candidate objects can be manipulated by adding or removing candidates.
+Addition and subtraction of integers can add and remove candidates, and bitwise
+operations between two candidates objects can give unions and intersections.
+
+#### Cells
+
+`Cells` is an object to represent a collection of Cells. It supports addition
+and subtraction with `Cell` objects to add or remove cells, and bitwise
+operations with other `Cells` objects to perform unions or intersections.
+Iterating over a `Cells` object will yield each `Cell` contained within it.
+
+#### Grid
+
+A `Grid` object represents a sudoku puzzle. It contains the current state of the
+puzzle, as well as logic for modifying it and analysing it.
+
+The grid can be analysed for various properties:
 
 ```Python
-digit = grid.digit(cell)
+# Get the digit in the given cell
+digit = grid.analysis.get_digit_in_cell(cell)
 
-if grid.cell_empty(cell):
-    print("Cell is empty")
+# Count how many cells out of the given cells have the given digit as a candidate
+candidates = grid.analysis.count_cells_with_candidate(cells, digit)
 
-if grid.is_complete():
-    print("Puzzle is complete")
+# Has the puzzle been solved?
+grid.analysis.is_complete()
 ```
 
-## Modifying a Grid
-
-Editing a Sudoku grid is achieved with `GridModifier` It allows digits and
-candidates to be added or removed from a grid:
+The grid can be modified to change the set digits, or the candidates:
 
 ```Python
-from sudoku_strategy.grid import GridModifier
-
-modifier = GridModifier(grid)
-
 # Write 8 to R9C4
-modifier.add_digit(5, Cell(8, 3))
+grid.modifiy.write_digit(5, Cell(8, 3))
 
 # Calculate all candidate for the puzzle
-modifier.update_candidates()
+grid.modify.update_candidates()
 
 # Remove the candidate 6 from R3C8
-modifier.remove_candidate(6, Cell(2, 7))
-```
+grid.modify.remove_candidate(6, Cell(2, 7))
 
-## Analysing a Grid
-
-`GridAnalysis` provides higher level queries over a `GridState`. It is
-deliberately separate from the state itself. Analysis does not modify the
-puzzle. For example:
-
-```Python
-from sudoku_strategy.grid import GridAnalysis
-
-analysis = GridAnalysis(grid)
-
-# Query the candidates for a cell
-candidates = analysis.get_candidates_for_cell(cell)
-
-# Count how many candidates are in a cell
-count = analysis.count_candidates_in_cell(cell)
-
-# You can search a collection of cells (e.g. row 4) for a particular
-# candidate (e.g. 5)
-row_4 = analysis.iterate.row(3)
-cells_with_five = analysis.cells_with_candidate(row_4, 5)
-count = analysis.count_cells_with_candidate(row_4, 5)
+# Reset the puzzle to its starting state
+grid.modify.reset()
 ```
 
 ## Solving Strategies
@@ -191,7 +192,7 @@ can either show a cell that can have a digit entered, or provide a list of
 candidates that can be eliminated. For example:
 
 ```Python
-from sudoku_strategy.strategy import DigitDeduction, EliminationDeduction
+from sudoku_strategy.strategy import Deduction
 
 Deduction(
     strategy="Naked Single",
@@ -266,7 +267,7 @@ Puzzles can be read and written in various formats using `GridFileWriter` and
 ```Python
 from sudoku_strategy import GridFileWriter, GridFileReader
 
-# Load a file into a GridState
+# Load a file into a Grid
 grid = GridFileReader().load(path)
 
 # Manipulate the grid

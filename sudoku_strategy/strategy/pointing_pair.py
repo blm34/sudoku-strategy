@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -7,15 +9,14 @@ from .deduction import CellDigit, Deduction
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from sudoku_strategy import Cell
-    from sudoku_strategy.grid import GridAnalysis
+    from sudoku_strategy.grid import Cells, GridAnalysis
 
 
 @dataclass(frozen=True)
 class PointingPair:
     digit: int
     box: int
-    cells: tuple[Cell, ...]
+    cells: Cells
 
 
 class PointingPairStrategy(AbsStrategy):
@@ -29,7 +30,7 @@ class PointingPairStrategy(AbsStrategy):
             if len(eliminations) == 0:
                 continue
 
-            elimination_cells = (f"{elim.cell}" for elim in eliminations)
+            elimination_cells = (str(elim.cell) for elim in eliminations)
             elimination_cells = ", ".join(elimination_cells)
 
             return Deduction(
@@ -43,7 +44,7 @@ class PointingPairStrategy(AbsStrategy):
     def _find_pointing_pairs(self, analysis: GridAnalysis) -> Generator[PointingPair]:
         """Find pointing pairs that may or may not result in an elimination"""
         for box_id in range(9):
-            box_cells = analysis.iterate.box(box_id)
+            box_cells = analysis.cell_groups.box(box_id)
 
             for digit in range(1, 10):
                 cells = analysis.get_cells_with_candidate(box_cells, digit)
@@ -52,21 +53,21 @@ class PointingPairStrategy(AbsStrategy):
                     continue
 
                 # Check rows
-                row = cells[0].row
+                row = next(iter(cells)).row
                 if all(cell.row == row for cell in cells):
                     yield PointingPair(
                         digit=digit,
                         box=box_id,
-                        cells=analysis.iterate.row(row),
+                        cells=analysis.cell_groups.row(row),
                     )
 
                 # Check columns
-                col = cells[0].col
+                col = next(iter(cells)).col
                 if all(cell.col == col for cell in cells):
                     yield PointingPair(
                         digit=digit,
                         box=box_id,
-                        cells=analysis.iterate.col(col),
+                        cells=analysis.cell_groups.col(col),
                     )
 
     def _get_eliminations(
