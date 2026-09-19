@@ -1,7 +1,6 @@
 from logging import getLogger
 from typing import TYPE_CHECKING
 
-from sudoku_strategy.grid import GridAnalysis, GridModifier
 from sudoku_strategy.strategy import (
     EliminateCandidatesStrategy,
     HiddenSingleStrategy,
@@ -12,7 +11,7 @@ from sudoku_strategy.strategy import (
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from sudoku_strategy.grid import GridState
+    from sudoku_strategy.grid import Grid
     from sudoku_strategy.strategy.abs_strategy import AbsStrategy
     from sudoku_strategy.strategy.deduction import Deduction
 
@@ -32,7 +31,7 @@ class Solver:
     def __init__(self, strategies: Sequence[AbsStrategy] = STRATEGIES):
         self._strategies = strategies
 
-    def find_next(self, grid: GridState) -> Deduction | None:
+    def find_next(self, grid: Grid) -> Deduction | None:
         """Find the next move for the given grid.
 
         Args:
@@ -41,17 +40,15 @@ class Solver:
         Returns:
             The next move, or None if none are found
         """
-        analysis = GridAnalysis(grid)
-
         for strategy in self._strategies:
-            deduction = strategy.find(analysis)
+            deduction = strategy.find(grid.analyse)
 
             if deduction is not None:
                 return deduction
 
         return None
 
-    def solve(self, grid: GridState) -> list[Deduction]:
+    def solve(self, grid: Grid) -> list[Deduction]:
         """Find all the moves to solve the sudoku.
 
         Args:
@@ -61,10 +58,9 @@ class Solver:
             A list of moves to solve the puzzle
         """
         working_grid = grid.copy()
-        modifier = GridModifier(working_grid)
         deductions = []
 
-        while not working_grid.is_complete():
+        while not working_grid.analyse.is_complete():
             deduction = self.find_next(working_grid)
 
             if deduction is None:
@@ -73,6 +69,6 @@ class Solver:
 
             deductions.append(deduction)
 
-            modifier.apply(deduction)
+            working_grid.modify.apply(deduction)
 
         return deductions
