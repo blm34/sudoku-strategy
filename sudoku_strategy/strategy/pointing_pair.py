@@ -52,8 +52,10 @@ class PointingPairStrategy(AbsStrategy):
                 if len(cells) == 0 or len(cells) > 3:
                     continue
 
+                first_cell = cells.first()
+
                 # Check rows
-                row = next(iter(cells)).row
+                row = first_cell.row
                 if all(cell.row == row for cell in cells):
                     yield PointingPair(
                         digit=digit,
@@ -62,7 +64,7 @@ class PointingPairStrategy(AbsStrategy):
                     )
 
                 # Check columns
-                col = next(iter(cells)).col
+                col = first_cell.col
                 if all(cell.col == col for cell in cells):
                     yield PointingPair(
                         digit=digit,

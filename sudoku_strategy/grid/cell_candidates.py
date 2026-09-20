@@ -5,6 +5,9 @@ if TYPE_CHECKING:
     from typing import Self
 
 
+class NoCandidatesError(Exception): ...
+
+
 class CellCandidates:
     """Store the candidate values for a single cell.
 
@@ -66,6 +69,19 @@ class CellCandidates:
     def remove_all(self):
         """Remove all candidates."""
         self._mask = 0
+
+    def first(self) -> int:
+        """Get the first (smallest) candidate.
+
+        Returns:
+            The value of the smallest candidate
+        """
+        try:
+            return next(iter(self))
+        except StopIteration as exc:
+            raise NoCandidatesError(
+                "Cannot get the first candidate when there are none."
+            ) from exc
 
     @classmethod
     def _mask_for_digit(cls, digit: int) -> int:

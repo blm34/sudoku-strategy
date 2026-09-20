@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
-from sudoku_strategy.grid import Cell
+from sudoku_strategy.grid import Cell, Cells
 from sudoku_strategy.strategy.hidden_single import HiddenSingleStrategy
 
 
@@ -24,10 +24,17 @@ class TestHiddenSingleStrategy:
 
         analysis.cell_groups.units.return_value = (cells,)
 
+        cells_with_multiple = MagicMock(Cells)
+        cells_with_multiple.__len__.return_value = 2
+
+        cells_with_one = MagicMock(Cells)
+        cells_with_one.__len__.return_value = 1
+        cells_with_one.first.return_value = cells[1]
+
         analysis.get_cells_with_candidate.side_effect = [
-            (cells[0], cells[1]),  # 1 can go in two cells
-            (cells[0], cells[1]),  # 2 can go in two cells
-            (cells[1],),  # 3 can only go in cells[1]
+            cells_with_multiple,  # 1 can go in two cells
+            cells_with_multiple,  # 2 can go in two cells
+            cells_with_one,  # 3 can only go in one cell
         ]
 
         # ACT
@@ -62,16 +69,19 @@ class TestHiddenSingleStrategy:
 
     def test_returns_first_hidden_single(self, analysis, strategy):
         # ARRANGE
-        first = Mock(Cell, row=0, col=0)
-        second = Mock(Cell, row=0, col=1)
+        cell = Mock(Cell, row=0, col=0)
 
-        cells = [first, second]
+        cells_with_one = MagicMock(Cells)
+        cells_with_one.__len__.return_value = 1
+        cells_with_one.first.return_value = cell
+
+        cells = [cell]
 
         analysis.cell_groups.units.return_value = (cells,)
 
         analysis.get_cells_with_candidate.side_effect = [
-            (first,),  # 1 is a hidden single
-            (second,),  # 2 is also a hidden single
+            cells_with_one,  # 1 is a hidden single
+            cells_with_one,  # 2 is also a hidden single
         ]
 
         # ACT
@@ -80,27 +90,6 @@ class TestHiddenSingleStrategy:
         # ASSERT
         assert deduction is not None
         assert deduction.assignment is not None
-        assert deduction.assignment.cell is first
+        assert deduction.assignment.cell is cell
         assert deduction.assignment.digit == 1
-
-    def test_stops_after_finding_hidden_single(self, analysis, strategy):
-        # ARRANGE
-        first = Mock(Cell, row=0, col=0)
-        second = Mock(Cell, row=0, col=1)
-        third = Mock(Cell, row=0, col=2)
-
-        cells = [first, second, third]
-
-        analysis.cell_groups.units.return_value = (cells,)
-
-        analysis.get_cells_with_candidate.side_effect = [
-            (first,),  # 1 is a hidden single
-            (second,),  # 2 should not be checked
-            (third,),  # 3 should not be checked
-        ]
-
-        # ACT
-        strategy.find(analysis)
-
-        # ASSERT
         assert analysis.get_cells_with_candidate.call_count == 1

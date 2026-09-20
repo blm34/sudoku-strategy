@@ -50,4 +50,4 @@ class NakedSingleStrategy(AbsStrategy):
             The value of the naked single
         """
         candidates = analysis.get_candidates_for_cell(cell)
-        return next(iter(candidates))
+        return candidates.first()

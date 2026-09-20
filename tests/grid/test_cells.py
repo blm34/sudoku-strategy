@@ -3,7 +3,7 @@ from unittest.mock import Mock
 import pytest
 
 from sudoku_strategy.grid import Cell
-from sudoku_strategy.grid.cells import Cells
+from sudoku_strategy.grid.cells import Cells, CellsEmptyException
 
 
 class TestCells:
@@ -16,6 +16,33 @@ class TestCells:
 
         # ASSERT
         assert mask == 0
+
+    @pytest.mark.parametrize(
+        ("mask", "index"),
+        (
+            (0b100, 2),
+            (0b10010, 1),
+            (0b11111, 0),
+            (0b101011000000, 6),
+        ),
+    )
+    def test_first_returns_first_cell_in_cells(self, mask, index):
+        # ARRANGE
+        cells = Cells(mask)
+
+        # ACT
+        first = cells.first()
+
+        # ASSERT
+        assert first.index == index
+
+    def test_first_raises_error_when_no_cells_present(self):
+        # ARRANGE
+        cells = Cells(0)
+
+        with pytest.raises(CellsEmptyException):
+            # ACT
+            cells.first()
 
     @pytest.mark.parametrize(
         ("index", "expected_mask"),

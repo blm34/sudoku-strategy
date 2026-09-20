@@ -1,6 +1,6 @@
 import pytest
 
-from sudoku_strategy.grid.cell_candidates import CellCandidates
+from sudoku_strategy.grid.cell_candidates import CellCandidates, NoCandidatesError
 
 
 class TestCellCandidates:
@@ -45,6 +45,33 @@ class TestCellCandidates:
 
         # ASSERT
         assert candidates._mask == 0b000000000
+
+    @pytest.mark.parametrize(
+        ("mask", "expected_digit"),
+        (
+            (0b000000001, 1),
+            (0b111000100, 3),
+            (0b100000000, 9),
+            (0b000011000, 4),
+        ),
+    )
+    def test_first_returns_smallest_candidate(self, mask, expected_digit):
+        # ARRANGE
+        candidates = CellCandidates(mask)
+
+        # ACT
+        digit = candidates.first()
+
+        # ASSERT
+        assert digit == expected_digit
+
+    def test_first_raises_no_candidates_error_when_candidates_are_empty(self):
+        # ARRANGE
+        candidates = CellCandidates.empty()
+
+        with pytest.raises(NoCandidatesError):
+            # ACT
+            candidates.first()
 
     @pytest.mark.parametrize(
         ("digit", "expected_mask"),
