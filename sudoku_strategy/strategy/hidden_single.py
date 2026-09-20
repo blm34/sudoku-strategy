@@ -36,7 +36,7 @@ class HiddenSingleStrategy(AbsStrategy):
                 candidate_cells = analysis.get_cells_with_candidate(cells, digit)
                 if len(candidate_cells) == 1:
                     return CellDigit(
-                        cell=next(iter(candidate_cells)),
+                        cell=candidate_cells.first(),
                         digit=digit,
                     )
         return None

@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
-from sudoku_strategy.grid import Cell
+from sudoku_strategy.grid import Cell, Cells
 from sudoku_strategy.strategy.deduction import CellDigit
 from sudoku_strategy.strategy.pointing_pair import PointingPair, PointingPairStrategy
 
@@ -20,8 +20,15 @@ class TestPointingPairStrategy:
         fourth = MagicMock(Cell, row=0, col=3, box=1)
         fourth.configure_mock(**{"__str__.return_value": "R1C4"})
 
-        box_cells = (first, second, third)
-        row_cells = (first, second, third, fourth)
+        box_cells = MagicMock(Cells)
+        box_cells.__iter__.return_value = iter((first, second, third))
+        box_cells.__len__.return_value = 3
+        box_cells.first.return_value = first
+
+        row_cells = MagicMock(Cells)
+        row_cells.__iter__.return_value = iter((first, second, third, fourth))
+        row_cells.__len__.return_value = 4
+        row_cells.first.return_value = first
 
         analysis.cell_groups.box.return_value = box_cells
         analysis.get_cells_with_candidate.return_value = box_cells
@@ -50,8 +57,13 @@ class TestPointingPairStrategy:
         box_cells = (first, second, Mock(Cell, row=1, col=1, box=0))
         col_cells = (first, second, third)
 
+        candidate_cells = MagicMock(Cells)
+        candidate_cells.__len__.return_value = 2
+        candidate_cells.__iter__.return_value = iter((first, second))
+        candidate_cells.first.return_value = first
+
         analysis.cell_groups.box.return_value = box_cells
-        analysis.get_cells_with_candidate.return_value = (first, second)
+        analysis.get_cells_with_candidate.return_value = candidate_cells
         analysis.cell_groups.col.return_value = col_cells
 
         analysis.cell_has_candidate.return_value = True
@@ -67,16 +79,9 @@ class TestPointingPairStrategy:
             "Candidates for 1 in box 0 allow for eliminations in R4C1."
         )
 
-    def test_returns_none_when_no_pointing_pair(self, analysis, strategy):
+    def test_find_returns_none_when_no_pointing_pair(self, analysis, strategy):
         # ARRANGE
-        cells = (
-            Mock(Cell, row=0, col=0, box=0),
-            Mock(Cell, row=0, col=1, box=0),
-            Mock(Cell, row=1, col=0, box=0),
-        )
-
-        analysis.cell_groups.box.return_value = cells
-        analysis.get_cells_with_candidate.return_value = cells
+        strategy._find_pointing_pairs = Mock(return_value=[])
 
         # ACT
         result = strategy.find(analysis)
@@ -93,10 +98,16 @@ class TestPointingPairStrategy:
         third = Mock(Cell, row=0, col=2, box=0)
         fourth = Mock(Cell, row=0, col=3, box=1)
 
-        analysis.cell_groups.box.return_value = (first, second)
-        analysis.get_cells_with_candidate.return_value = (first, second)
+        box_cells = MagicMock(Cells)
+        box_cells.__iter__.return_value = iter((first, second, third))
+
+        row_cells = MagicMock(Cells)
+        row_cells.__iter__.return_value = iter((first, second, third, fourth))
+
+        analysis.cell_groups.box.return_value = box_cells
+        analysis.get_cells_with_candidate.return_value = box_cells
         analysis.cell_has_candidate.return_value = False
-        analysis.cell_groups.row.return_value = (first, second, third, fourth)
+        analysis.cell_groups.row.return_value = row_cells
 
         # ACT
         result = strategy.find(analysis)
@@ -140,36 +151,35 @@ class TestPointingPairStrategy:
         # ASSERT
         assert result is None
 
-    def test_finds_first_pointing_pair_with_elimination(self, analysis, strategy):
+    def test_find_pointing_pairs_finds_first_pointing_pair_with_elimination(
+        self, analysis, strategy
+    ):
         # ARRANGE
         first = Mock(Cell, row=0, col=0, box=0)
         second = Mock(Cell, row=0, col=1, box=0)
-        first_elimination = Mock(Cell, row=0, col=3, box=1)
-        second_elimination = Mock(Cell, row=0, col=4, box=1)
 
-        analysis.cell_groups.box.return_value = (first, second)
+        box_cells = MagicMock(Cells)
+        box_cells.__iter__.return_value = iter((first, second))
+        box_cells.first.return_value = first
+        box_cells.__len__.return_value = 2
 
-        analysis.get_cells_with_candidate.side_effect = [
-            (),
-            (first, second),
-        ]
+        row_cells = MagicMock(Cells)
 
-        analysis.cell_groups.row.return_value = (
-            first,
-            second,
-            first_elimination,
-            second_elimination,
-        )
+        analysis.cell_groups.box.return_value = box_cells
+        analysis.cell_groups.row.return_value = row_cells
+
+        analysis.get_cells_with_candidate.side_effect = [(), box_cells]
 
         analysis.cell_has_candidate.side_effect = [True, False]
 
         # ACT
-        deduction = strategy.find(analysis)
+        pointing_pairs = strategy._find_pointing_pairs(analysis)
 
         # ASSERT
-        assert deduction is not None
-        assert deduction.strategy == "Pointing Pair"
-        assert deduction.eliminations == [CellDigit(first_elimination, 2)]
+        result = next(pointing_pairs)
+        assert result.digit == 2
+        assert result.box == 0
+        assert result.cells == row_cells
 
     def test_get_eliminations_ignores_cells_in_pointing_pair_box(
         self, analysis, strategy
@@ -178,10 +188,13 @@ class TestPointingPairStrategy:
         box_cell = Mock(Cell, row=0, col=0, box=0)
         elimination_cell = Mock(Cell, row=0, col=3, box=1)
 
+        cells = MagicMock(Cells)
+        cells.__iter__.return_value = iter((box_cell, elimination_cell))
+
         pointing_pair = PointingPair(
             digit=5,
             box=0,
-            cells=(box_cell, elimination_cell),
+            cells=cells,
         )
 
         analysis.cell_has_candidate.return_value = True
@@ -200,17 +213,22 @@ class TestPointingPairStrategy:
         )
 
     def test_get_eliminations_only_returns_cells_with_candidate(
-        self, analysis, strategy
+        self,
+        analysis,
+        strategy,
     ):
         # ARRANGE
         first = Mock(Cell, row=0, col=0, box=1)
         second = Mock(Cell, row=0, col=1, box=2)
         third = Mock(Cell, row=0, col=2, box=3)
 
+        cells = MagicMock(Cells)
+        cells.__iter__.return_value = iter((first, second, third))
+
         pointing_pair = PointingPair(
             digit=7,
             box=0,
-            cells=(first, second, third),
+            cells=cells,
         )
 
         analysis.cell_has_candidate.side_effect = [True, False, True]
@@ -231,13 +249,10 @@ class TestPointingPairStrategy:
         self, analysis, strategy
     ):
         # ARRANGE
-        first = Mock(Cell, row=0, col=0, box=1)
-        second = Mock(Cell, row=0, col=1, box=2)
-
         pointing_pair = PointingPair(
             digit=3,
             box=0,
-            cells=(first, second),
+            cells=MagicMock(Cells),
         )
 
         analysis.cell_has_candidate.return_value = False
