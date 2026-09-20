@@ -7,6 +7,9 @@ if TYPE_CHECKING:
     from typing import Self
 
 
+class CellsEmptyException(Exception): ...
+
+
 class Cells:
     """Representation of a collection of cells.
 
@@ -26,6 +29,21 @@ class Cells:
         Args:
             mask: The bit mask to use."""
         self._mask = mask
+
+    def first(self) -> Cell:
+        """Return the first cell in the collection.
+
+        This is the cell with the lowest index that is in the collection of cells.
+
+        Returns:
+            The first cell present in the cells
+        """
+        try:
+            return next(iter(self))
+        except StopIteration as exc:
+            raise CellsEmptyException(
+                "Cannot get the first cell in empty `Cells`"
+            ) from exc
 
     def _mask_for_cell(self, cell: Cell) -> int:
         """Get the mask for the given cell.
