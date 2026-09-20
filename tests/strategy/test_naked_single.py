@@ -2,7 +2,7 @@ from unittest.mock import MagicMock, Mock
 
 import pytest
 
-from sudoku_strategy.grid import Cell
+from sudoku_strategy.grid import Cell, CellCandidates
 from sudoku_strategy.strategy.naked_single import NakedSingleStrategy
 
 
@@ -16,9 +16,12 @@ class TestNakedSingleStrategy:
         cell = MagicMock(Cell, row=3, col=6)
         cell.configure_mock(**{"__str__.return_value": "R4C7"})
 
+        cell_candidates = Mock(CellCandidates)
+        cell_candidates.first.return_value = 5
+
         analysis.cell_groups.empty_cells.return_value = [cell]
         analysis.count_candidates_in_cell.return_value = 1
-        analysis.get_candidates_for_cell.return_value = (5,)
+        analysis.get_candidates_for_cell.return_value = cell_candidates
 
         # ACT
         deduction = strategy.find(analysis)
@@ -53,9 +56,12 @@ class TestNakedSingleStrategy:
         first = Mock(Cell, row=0, col=0)
         second = Mock(Cell, row=4, col=5)
 
+        cell_candidates = Mock(CellCandidates)
+        cell_candidates.first.return_value = 7
+
         analysis.cell_groups.empty_cells.return_value = (first, second)
         analysis.count_candidates_in_cell.side_effect = [2, 1]
-        analysis.get_candidates_for_cell.return_value = (7,)
+        analysis.get_candidates_for_cell.return_value = cell_candidates
 
         # ACT
         deduction = strategy.find(analysis)
@@ -72,9 +78,12 @@ class TestNakedSingleStrategy:
         second = Mock(Cell, row=0, col=1)
         third = Mock(Cell, row=0, col=2)
 
+        cell_candidates = Mock(CellCandidates)
+        cell_candidates.first.return_value = 4
+
         analysis.cell_groups.empty_cells.return_value = (first, second, third)
         analysis.count_candidates_in_cell.side_effect = [2, 1, 1]
-        analysis.get_candidates_for_cell.return_value = (4,)
+        analysis.get_candidates_for_cell.return_value = cell_candidates
 
         # ACT
         strategy.find(analysis)
