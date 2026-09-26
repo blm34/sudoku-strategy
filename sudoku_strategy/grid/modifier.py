@@ -152,6 +152,8 @@ class GridModifier:
         for cell in self._cell_groups.empty_cells():
             self._state.cell_candidates[cell.index] = CellCandidates.with_all()
 
+        self._state.fill_value_candidates()
+
         for cell in self._cell_groups.filled_cells():
             digit = self._state.digits[cell.index]
             self.update_candidates(digit, cell)
