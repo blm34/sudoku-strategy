@@ -1,5 +1,3 @@
-from unittest.mock import MagicMock, Mock
-
 import pytest
 
 from sudoku_strategy.grid import Cell, Cells, GridState
@@ -9,7 +7,7 @@ from sudoku_strategy.grid.cell_groups import CellGroups
 class TestCellGroups:
     @pytest.fixture
     def state(self):
-        return Mock(GridState)
+        return GridState.create_empty()
 
     @pytest.fixture
     def cell_groups(self, state):
@@ -24,30 +22,20 @@ class TestCellGroups:
 
     def test_empty_cells_returns_filled_cells_inverted(self, cell_groups, state):
         # ARRANGE
-        state = cell_groups._state
-        filled_cells = MagicMock(Cells)
-        empty_cells = MagicMock(Cells)
-        filled_cells.__invert__.return_value = empty_cells
-        state.filled_cells = filled_cells
+        state.filled_cells = Cells(0b00101100101010100100001110)
 
         # ACT
         cells = cell_groups.empty_cells()
 
         # ASSERT
-        assert cells is empty_cells
-        filled_cells.__invert__.assert_called_once()
+        assert cells._mask == (~state.filled_cells)._mask
 
     def test_filled_cells_returns_grid_state_filled_cells(self, cell_groups, state):
-        # ARRANGE
-        state = cell_groups._state
-        filled_cells = Mock(Cells)
-        state.filled_cells = filled_cells
-
         # ACT
         cells = cell_groups.filled_cells()
 
         # ASSERT
-        assert cells is filled_cells
+        assert cells is state.filled_cells
 
     def test_units_produces_27_units_with_nine_values(self, cell_groups):
         # ACT
@@ -118,33 +106,14 @@ class TestCellGroups:
 
     def test_peers_combine_row_col_and_box_and_excludes_cell(self, cell_groups):
         # ARRANGE
-        class FakeCells(set):
-            def __or__(self, other):
-                return FakeCells(super().__or__(other))
-
-            def __sub__(self, other):
-                return FakeCells(cell for cell in self if cell != other)
-
-        cell = Mock(Cell, row=0, col=8, box=2)
-
-        shared_cell = Mock(Cell)
-        row_cell = Mock(Cell)
-        col_cell = Mock(Cell)
-        box_cell = Mock(Cell)
-
-        row = FakeCells({shared_cell, cell, row_cell})
-        col = FakeCells({shared_cell, cell, col_cell})
-        box = FakeCells({shared_cell, cell, box_cell})
-
-        cell_groups.row = Mock(return_value=row)
-        cell_groups.col = Mock(return_value=col)
-        cell_groups.box = Mock(return_value=box)
+        cell = Cell(8)
 
         # ACT
         peers = cell_groups.peers(cell)
 
         # ASSERT
-        assert peers == {shared_cell, row_cell, col_cell, box_cell}
-        cell_groups.row.assert_called_once_with(0)
-        cell_groups.col.assert_called_once_with(8)
-        cell_groups.box.assert_called_once_with(2)
+        assert len(peers) == 20
+        assert cell not in peers
+
+        for peer in peers:
+            assert peer.row == cell.row or peer.col == cell.col or peer.box == cell.box

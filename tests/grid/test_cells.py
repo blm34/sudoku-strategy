@@ -1,5 +1,3 @@
-from unittest.mock import Mock
-
 import pytest
 
 from sudoku_strategy.grid import Cell
@@ -56,7 +54,7 @@ class TestCells:
     )
     def test_mask_for_cell_gives_correct_bit_mask(self, index, expected_mask):
         # ARRANGE
-        cell = Mock(Cell, index=index)
+        cell = Cell(index)
         cells = Cells()
 
         # ACT
@@ -65,58 +63,34 @@ class TestCells:
         # ASSERT
         assert mask == expected_mask
 
-    def test_subtract_in_place_removes_cell(self):
+    def test_subtract_in_place_removes_one_cell(self):
         # ARRANGE
-        cell = Mock(Cell, index=40)
-        cells = Cells(1 << cell.index)
+        cell = Cell(80)
+        cells = Cells.with_all()
 
         # ACT
         cells -= cell
 
         # ASSERT
-        assert cells._mask == 0
-
-    def test_subtract_in_place_does_not_remove_other_cells(self):
-        # ARRANGE
-        remaining_cell = Mock(Cell, index=0)
-        removed_cell = Mock(Cell, index=80)
-        mask = (1 << remaining_cell.index) | (1 << removed_cell.index)
-        cells = Cells(mask)
-
-        # ACT
-        cells -= removed_cell
-
-        # ASSERT
-        assert cells._mask == 0b1
+        assert len(cells) == 80
+        assert cell not in cells
 
     def test_subtract_removes_cell(self):
         # ARRANGE
-        cell = Mock(Cell, index=40)
-        cells = Cells(1 << cell.index)
+        cell = Cell(40)
+        cells = Cells.with_all()
 
         # ACT
         new_cells = cells - cell
 
         # ASSERT
-        assert new_cells._mask == 0
-
-    def test_subtract_does_not_remove_other_cells(self):
-        # ARRANGE
-        remaining_cell = Mock(Cell, index=0)
-        removed_cell = Mock(Cell, index=80)
-        mask = (1 << remaining_cell.index) | (1 << removed_cell.index)
-        cells = Cells(mask)
-
-        # ACT
-        new_cells = cells - removed_cell
-
-        # ASSERT
-        assert new_cells._mask == 0b1
+        assert len(new_cells) == 80
+        assert cell not in new_cells
 
     def test_subtract_makes_a_new_object(self):
         # ARRANGE
-        cell = Mock(Cell, index=30)
-        cells = Cells(1 << cell.index)
+        cell = Cell(30)
+        cells = Cells.with_all()
 
         # ACT
         new_cells = cells - cell
@@ -126,58 +100,63 @@ class TestCells:
 
     def test_add_in_place_adds_cell(self):
         # ARRANGE
-        cells = Cells(0)
-        cell = Mock(Cell, index=4)
+        cells = Cells()
+        cell = Cell(4)
 
         # ACT
         cells += cell
 
         # ASSERT
-        assert cells._mask == 0b10000
+        assert len(cells) == 1
+        assert cell in cells
 
     def test_add_in_place_does_not_remove_existing_cells(self):
         # ARRANGE
-        existing_cell = Mock(Cell, index=0)
-        new_cell = Mock(Cell, index=5)
+        existing_cell = Cell(0)
+        new_cell = Cell(5)
         cells = Cells(1 << existing_cell.index)
 
         # ACT
         cells += new_cell
 
         # ASSERT
-        assert cells._mask == 0b100001
+        assert len(cells) == 2
+        assert existing_cell in cells
+        assert new_cell in cells
 
     def test_add_adds_cells(self):
         # ARRANGE
-        cells = Cells(0)
-        cell = Mock(Cell, index=3)
+        cells = Cells()
+        cell = Cell(3)
 
         # ACT
         new_cells = cells + cell
 
         # ASSERT
-        assert new_cells._mask == 0b1000
+        assert len(new_cells) == 1
+        assert cell in new_cells
 
     def test_add_does_not_remove_existing_cells(self):
         # ARRANGE
-        existing_cell = Mock(Cell, index=0)
-        new_cell = Mock(Cell, index=2)
+        existing_cell = Cell(0)
+        new_cell = Cell(2)
         cells = Cells(1 << existing_cell.index)
 
         # ACT
         new_cells = cells + new_cell
 
         # ASSERT
-        assert new_cells._mask == 0b101
+        assert len(new_cells) == 2
+        assert existing_cell in new_cells
+        assert new_cell in new_cells
 
     def test_add_creates_a_new_object(self):
         # ARRANGE
-        existing_cell = Mock(Cell, index=0)
-        new_cell = Mock(Cell, index=80)
-        cells = Cells(1 << existing_cell.index)
+        cell = Cell(80)
+        cells = Cells()
 
         # ACT
-        new_cells = cells + new_cell
+        new_cells = cells + cell
 
         # ASSERT
         assert new_cells is not cells
@@ -212,36 +191,35 @@ class TestCells:
 
     def test_invert_returns_complement(self):
         # ARRANGE
-        cells = Cells(1 << 40)
+        cell = Cell(40)
+        cells = Cells(1 << cell.index)
 
         # ACT
         result = ~cells
 
         # ASSERT
-        mask = result._mask
-        assert mask.bit_count() == 80
-        assert (mask >> 40) & 1 == 0
+        assert len(result) == 80
+        assert cell not in result
 
     def test_invert_of_empty_cells_contains_all_81_cells(self):
         # ARRANGE
-        cells = Cells(0)
+        cells = Cells()
 
         # ACT
         result = ~cells
 
         # ASSERT
-        assert result._mask == (1 << 81) - 1
+        assert len(result) == 81
 
     def test_invert_of_all_cells_contains_no_cells(self):
         # ARRANGE
-        mask = (1 << 81) - 1
-        cells = Cells(mask)
+        cells = Cells.with_all()
 
         # ACT
         result = ~cells
 
         # ASSERT
-        assert result._mask == 0
+        assert len(result) == 0
 
     def test_len_gives_number_of_cells(self):
         # ARRANGE
@@ -256,9 +234,8 @@ class TestCells:
 
     def test_contians_checks_cell_is_in_cells(self):
         # ARRANGE
-        cell = Mock(Cell, index=48)
-        mask = 1 << cell.index
-        cells = Cells(mask)
+        cell = Cell(48)
+        cells = Cells(1 << cell.index)
 
         # ACT
         contains = cell in cells
@@ -268,10 +245,9 @@ class TestCells:
 
     def test_contians_checks_cell_is_not_in_cells(self):
         # ARRANGE
-        cell = Mock(Cell, index=48)
-        other_cell = Mock(Cell, index=38)
-        mask = 1 << cell.index
-        cells = Cells(mask)
+        cell = Cell(48)
+        other_cell = Cell(38)
+        cells = Cells(1 << cell.index)
 
         # ACT
         contains = other_cell in cells

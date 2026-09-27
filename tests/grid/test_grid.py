@@ -2,22 +2,22 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from sudoku_strategy.grid import GridAnalysis, GridModifier, GridState
+from sudoku_strategy.grid import CellGroups, GridAnalysis, GridModifier, GridState
 from sudoku_strategy.grid.grid import Grid
 
 
 class TestGrid:
     @pytest.fixture
     def state(self):
-        return Mock(GridState)
+        return GridState.create_empty()
 
     @pytest.fixture
     def modifier(self, state):
-        return Mock(GridModifier, _state=state)
+        return GridModifier(state)
 
     @pytest.fixture
     def analysis(self, state):
-        return Mock(GridAnalysis, _state=state)
+        return GridAnalysis(state)
 
     def test_grid_initialises_with_attributes(self, state, modifier, analysis):
         # ACT
@@ -64,7 +64,7 @@ class TestGrid:
 
     def test_from_state_creates_grid_components(self, state, modifier, analysis):
         # ARRANGE
-        cell_groups = Mock()
+        cell_groups = Mock(CellGroups)
 
         with (
             patch(
@@ -125,6 +125,7 @@ class TestGrid:
     def test_copy_makes_a_copy_of_the_state(self, state, analysis, modifier):
         # ARRANGE
         grid = Grid(state, modifier, analysis)
+        grid._state.copy = Mock()
 
         # ACT
         grid.copy()
@@ -140,9 +141,8 @@ class TestGrid:
     ):
         # ARRANGE
         copied_state = Mock()
-        state.copy.return_value = copied_state
-
         grid = Grid(state, modifier, analysis)
+        grid._state.copy = Mock(return_value=copied_state)
         copied_grid = Mock()
 
         with patch(
