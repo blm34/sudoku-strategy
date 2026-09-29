@@ -1,5 +1,3 @@
-from unittest.mock import Mock
-
 import pytest
 
 from sudoku_strategy.grid import Cell
@@ -12,15 +10,16 @@ class TestEliminateCandidatesStrategy:
     def strategy(self):
         return EliminateCandidatesStrategy()
 
-    def test_finds_eliminatable_candidate(self, analysis, strategy):
+    def test_finds_eliminatable_candidate(self, analysis, state, strategy):
         # ARRANGE
-        filled_cell = Mock(Cell, row=0, col=0)
-        peer = Mock(Cell, row=0, col=1)
+        digit = 5
+        filled_cell = Cell(0)
+        state.digits[filled_cell.index] = digit
+        state.filled_cells += filled_cell
 
-        analysis.cell_groups.filled_cells.return_value = [filled_cell]
-        analysis.get_digit_in_cell.return_value = 5
-        analysis.cell_groups.peers.return_value = [peer]
-        analysis.get_cells_with_candidate.return_value = [peer]
+        peer = Cell(1)
+        state.cell_candidates[peer.index] += digit
+        state.value_candidates[digit] += peer
 
         # ACT
         deduction = strategy.find(analysis)
@@ -34,16 +33,13 @@ class TestEliminateCandidatesStrategy:
         )
 
     def test_returns_none_when_no_candidates_can_be_eliminated(
-        self, analysis, strategy
+        self, analysis, state, strategy
     ):
         # ARRANGE
-        filled_cell = Mock(Cell, row=0, col=0)
-        peer = Mock(Cell, row=0, col=1)
-
-        analysis.cell_groups.filled_cells.return_value = [filled_cell]
-        analysis.get_digit_in_cell.return_value = 5
-        analysis.cell_groups.peers.return_value = [peer]
-        analysis.get_cells_with_candidate.return_value = []
+        digit = 5
+        filled_cell = Cell(0)
+        state.digits[filled_cell.index] = digit
+        state.filled_cells += filled_cell
 
         # ACT
         result = strategy.find(analysis)
@@ -51,19 +47,17 @@ class TestEliminateCandidatesStrategy:
         # ASSERT
         assert result is None
 
-    def test_finds_multiple_eliminatable_candidates(self, analysis, strategy):
+    def test_finds_multiple_eliminatable_candidates(self, analysis, state, strategy):
         # ARRANGE
-        filled_cell = Mock(Cell, row=0, col=0)
-        first_peer = Mock(Cell, row=0, col=1)
-        second_peer = Mock(Cell, row=1, col=0)
+        digit = 5
+        filled_cell = Cell(0)
+        state.digits[filled_cell.index] = digit
+        state.filled_cells += filled_cell
 
-        analysis.cell_groups.filled_cells.return_value = [filled_cell]
-        analysis.get_digit_in_cell.return_value = 5
-        analysis.cell_groups.peers.return_value = [first_peer, second_peer]
-        analysis.get_cells_with_candidate.return_value = [
-            first_peer,
-            second_peer,
-        ]
+        peers = (Cell(1), Cell(9))
+        for peer in peers:
+            state.cell_candidates[peer.index] += digit
+            state.value_candidates[digit] += peer
 
         # ACT
         deduction = strategy.find(analysis)
@@ -71,34 +65,29 @@ class TestEliminateCandidatesStrategy:
         # ASSERT
         assert deduction is not None
         assert deduction.eliminations == [
-            CellDigit(first_peer, 5),
-            CellDigit(second_peer, 5),
+            CellDigit(peers[0], digit),
+            CellDigit(peers[1], digit),
         ]
 
-    def test_finds_eliminations_from_multiple_filled_cells(self, analysis, strategy):
+    def test_finds_eliminations_from_multiple_filled_cells(
+        self, analysis, state, strategy
+    ):
         # ARRANGE
-        first_filled = Mock(Cell, row=0, col=0)
-        second_filled = Mock(Cell, row=1, col=1)
+        filled_cell_1 = Cell(0)
+        state.digits[filled_cell_1.index] = 5
+        state.filled_cells += filled_cell_1
 
-        first_peer = Mock(Cell, row=0, col=1)
-        second_peer = Mock(Cell, row=1, col=2)
+        filled_cell_2 = Cell(10)
+        state.digits[filled_cell_2.index] = 7
+        state.filled_cells += filled_cell_2
 
-        analysis.cell_groups.filled_cells.return_value = (
-            first_filled,
-            second_filled,
-        )
+        peer_1 = Cell(1)
+        state.cell_candidates[peer_1.index] += 5
+        state.value_candidates[5] += peer_1
 
-        analysis.get_digit_in_cell.side_effect = [5, 7]
-
-        analysis.cell_groups.peers.side_effect = [
-            [first_peer],
-            [second_peer],
-        ]
-
-        analysis.get_cells_with_candidate.side_effect = [
-            [first_peer],
-            [second_peer],
-        ]
+        peer_2 = Cell(2)
+        state.cell_candidates[peer_2.index] += 7
+        state.value_candidates[7] += peer_2
 
         # ACT
         deduction = strategy.find(analysis)
@@ -106,54 +95,32 @@ class TestEliminateCandidatesStrategy:
         # ASSERT
         assert deduction is not None
         assert deduction.eliminations == [
-            CellDigit(first_peer, 5),
-            CellDigit(second_peer, 7),
+            CellDigit(peer_1, 5),
+            CellDigit(peer_2, 7),
         ]
-
-    def test_checks_all_filled_cells(self, analysis, strategy):
-        # ARRANGE
-        first = Mock(Cell, row=0, col=0)
-        second = Mock(Cell, row=0, col=1)
-        third = Mock(Cell, row=0, col=2)
-
-        analysis.cell_groups.filled_cells.return_value = (first, second, third)
-
-        analysis.get_digit_in_cell.side_effect = [5, 6, 7]
-        analysis.cell_groups.peers.side_effect = [
-            [],
-            [],
-            [],
-        ]
-        analysis.get_cells_with_candidate.return_value = []
-
-        # ACT
-        result = strategy.find(analysis)
-
-        # ASSERT
-        assert result is None
-        assert analysis.get_digit_in_cell.call_count == 3
-        assert analysis.cell_groups.peers.call_count == 3
-        assert analysis.get_cells_with_candidate.call_count == 3
 
     def test_gets_candidates_for_filled_cell_digit_from_its_peers(
-        self, analysis, strategy
+        self, analysis, state, strategy
     ):
         # ARRANGE
-        filled_cell = Mock(Cell, row=3, col=6)
-        peers = (
-            Mock(Cell, row=3, col=0),
-            Mock(Cell, row=3, col=1),
-        )
+        digit = 6
 
-        analysis.cell_groups.filled_cells.return_value = [filled_cell]
-        analysis.get_digit_in_cell.return_value = 5
-        analysis.cell_groups.peers.return_value = peers
-        analysis.get_cells_with_candidate.return_value = []
+        filled_cell = Cell(33)
+        state.digits[filled_cell.index] = digit
+        state.filled_cells += filled_cell
+
+        peer = Cell(27)
+        state.cell_candidates[peer.index] += digit
+        state.value_candidates[digit] += peer
+
+        not_peer = Cell(2)
+        state.cell_candidates[not_peer.index] += digit
+        state.value_candidates[digit] += not_peer
 
         # ACT
-        strategy.find(analysis)
+        deduction = strategy.find(analysis)
 
         # ASSERT
-        analysis.get_digit_in_cell.assert_called_once_with(filled_cell)
-        analysis.cell_groups.peers.assert_called_once_with(filled_cell)
-        analysis.get_cells_with_candidate.assert_called_once_with(peers, 5)
+        assert len(deduction.eliminations) == 1
+        assert deduction.eliminations[0].cell == peer
+        assert deduction.eliminations[0].digit == digit

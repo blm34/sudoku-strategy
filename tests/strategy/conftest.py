@@ -1,15 +1,18 @@
-from unittest.mock import Mock
-
 import pytest
 
 from sudoku_strategy.grid import CellGroups, GridAnalysis, GridState
 
 
 @pytest.fixture
-def analysis():
-    analysis = Mock(GridAnalysis)
+def state() -> GridState:
+    return GridState.create_empty()
 
-    analysis._state = Mock(GridState)
-    analysis.cell_groups = Mock(CellGroups)
 
-    return analysis
+@pytest.fixture
+def cell_groups(state) -> CellGroups:
+    return CellGroups(state)
+
+
+@pytest.fixture
+def analysis(state, cell_groups) -> GridAnalysis:
+    return GridAnalysis(state, cell_groups)
