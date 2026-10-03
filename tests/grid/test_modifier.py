@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -10,19 +10,11 @@ from sudoku_strategy.strategy.deduction import CellDigit, Deduction
 class TestGridModifier:
     @pytest.fixture
     def state(self):
-        state = Mock(GridState)
-
-        state.digits = [None] * 81
-        state.puzzle_digits = [None] * 81
-        state.cell_candidates = [MagicMock(CellCandidates) for _ in range(81)]
-        state.value_candidates = {digit: MagicMock(Cells) for digit in range(1, 10)}
-        state.filled_cells = MagicMock(Cells)
-
-        return state
+        return GridState.create_empty()
 
     @pytest.fixture
-    def cell_groups(self):
-        return MagicMock(CellGroups)
+    def cell_groups(self, state):
+        return CellGroups(state)
 
     @pytest.fixture
     def modifier(self, state, cell_groups):
@@ -41,19 +33,18 @@ class TestGridModifier:
 
     def test_add_cell_to_filled_cells_updates_filled_cells(self, modifier, state):
         # ARRANGE
-        cell = MagicMock(Cell)
-        filled_cells = state.filled_cells
+        cell = Cell(0)
 
         # ACT
         modifier._add_cell_to_filled_cells(cell)
 
         # ASSERT
-        filled_cells.__iadd__.assert_called_once_with(cell)
+        assert cell in state.filled_cells
 
     def test_clear_candidates_in_cell_updates_cell_candidates(self, modifier, state):
         # ARRANGE
-        cell = Mock(Cell, index=42)
-        cell_candidates = MagicMock(CellCandidates)
+        cell = Cell(42)
+        cell_candidates = CellCandidates(0b111111111)
 
         state.cell_candidates[cell.index] = cell_candidates
 
@@ -61,31 +52,27 @@ class TestGridModifier:
         modifier._clear_candidates_in_cell(cell)
 
         # ASSERT
-        cell_candidates.remove_all.assert_called_once()
+        assert len(state.cell_candidates[cell.index]) == 0
 
     def test_clear_candidates_in_cell_updates_value_candidates(self, modifier, state):
         # ARRANGE
-        cell = Mock(Cell, index=42)
-        cell_candidates = MagicMock(CellCandidates)
-
-        value_candidates_2 = state.value_candidates[2]
-        value_candidates_5 = state.value_candidates[5]
-        value_candidates_9 = state.value_candidates[9]
-
-        state.cell_candidates[cell.index] = cell_candidates
-        cell_candidates.__iter__.return_value = iter([2, 5, 9])
+        cell = Cell(42)
+        state.cell_candidates[cell.index] = CellCandidates(0b100010010)
+        state.value_candidates[2] = Cells(1 << cell.index)
+        state.value_candidates[5] = Cells(1 << cell.index)
+        state.value_candidates[9] = Cells(1 << cell.index)
 
         # ACT
         modifier._clear_candidates_in_cell(cell)
 
         # ASSERT
-        value_candidates_2.__isub__.assert_called_once_with(cell)
-        value_candidates_5.__isub__.assert_called_once_with(cell)
-        value_candidates_9.__isub__.assert_called_once_with(cell)
+        assert cell not in state.value_candidates[2]
+        assert cell not in state.value_candidates[5]
+        assert cell not in state.value_candidates[9]
 
     def test_write_digit_updates_digits(self, modifier, state):
         # ARRANGE
-        cell = Mock(Cell, index=42)
+        cell = Cell(42)
 
         # ACT
         modifier.write_digit(7, cell)
@@ -93,45 +80,41 @@ class TestGridModifier:
         # ASSERT
         assert state.digits[cell.index] == 7
 
-    def test_write_digit_updates_filled_cells(self, modifier):
+    def test_write_digit_updates_filled_cells(self, modifier, state):
         # ARRANGE
-        cell = Mock(Cell, index=42)
+        cell = Cell(42)
 
-        with patch.object(modifier, "_add_cell_to_filled_cells") as add_cell:
-            # ACT
-            modifier.write_digit(7, cell)
+        # ACT
+        modifier.write_digit(7, cell)
 
-            # ASSERT
-            add_cell.assert_called_once_with(cell)
+        # ASSERT
+        assert cell in state.filled_cells
 
-    def test_write_digit_updates_cell_candidates(self, modifier):
+    def test_write_digit_updates_cell_candidates(self, modifier, state):
         # ARRANGE
-        cell = Mock(Cell, index=42)
+        cell = Cell(42)
+        state.cell_candidates[cell.index] = CellCandidates.with_all()
 
-        with patch.object(modifier, "_clear_candidates_in_cell") as clear_candidates:
-            # ACT
-            modifier.write_digit(7, cell)
+        # ACT
+        modifier.write_digit(7, cell)
 
-            # ASSERT
-            clear_candidates.assert_called_once_with(cell)
+        # ASSERT
+        assert len(state.cell_candidates[cell.index]) == 0
 
     def test_update_candidates_only_considers_peers_with_the_candidate(
-        self, modifier, state, cell_groups
+        self,
+        modifier,
+        state,
+        cell_groups,
     ):
         # ARRANGE
-        cell = Mock(Cell)
-        peer_with_candidate = Mock(Cell)
-        peer_without_candidate = Mock(Cell)
-        candidate_but_not_peer = Mock(Cell)
+        cell = Cell(40)
+        peer_with_candidate = Cell(41)
+        candidate_but_not_peer = Cell(0)
 
-        cell_groups.peers.return_value = {
-            peer_with_candidate,
-            peer_without_candidate,
-        }
-        state.value_candidates[7] = {
-            peer_with_candidate,
-            candidate_but_not_peer,
-        }
+        state.value_candidates[7] = Cells(
+            (1 << peer_with_candidate.index) + (1 << candidate_but_not_peer.index)
+        )
 
         with patch.object(modifier, "remove_candidate") as remove_candidate:
             # ACT
@@ -144,149 +127,149 @@ class TestGridModifier:
         self, modifier, state, cell_groups
     ):
         # ARRANGE
-        cell = Mock(Cell)
-        peer_1 = Mock(Cell)
-        peer_2 = Mock(Cell)
-        peer_3 = Mock(Cell)
-        peers = {peer_1, peer_2, peer_3}
+        cell = Cell(5)
+        peer = Cell(6)
+        digit = 7
+        state.cell_candidates[peer.index] = CellCandidates.from_digits([digit])
+        state.value_candidates[digit] += peer
 
-        cell_groups.peers.return_value = peers
-        state.value_candidates[7] = peers
+        # ACT
+        modifier.update_candidates(7, cell)
 
-        with patch.object(modifier, "remove_candidate") as remove_candidate:
-            # ACT
-            modifier.update_candidates(7, cell)
+        # ASSERT
+        assert digit not in state.cell_candidates[peer.index]
+        assert peer not in state.value_candidates[digit]
 
-            # ASSERT
-            assert remove_candidate.call_count == 3
-            remove_candidate.assert_any_call(7, peer_1)
-            remove_candidate.assert_any_call(7, peer_2)
-            remove_candidate.assert_any_call(7, peer_3)
+    def test_remove_candidate_updates_cell_candidates(self, modifier, state):
+        # ARRANGE
+        cell = Cell(42)
+        digit = 7
+        state.cell_candidates[cell.index] = CellCandidates.from_digits([digit])
+        state.value_candidates[digit] += cell
+
+        # ACT
+        modifier.remove_candidate(digit, cell)
+
+        # ASSERT
+        assert digit not in state.cell_candidates[cell.index]
+
+    def test_remove_candidate_updates_value_candidates(self, modifier, state):
+        # ARRANGE
+        cell = Cell(42)
+        digit = 7
+        state.cell_candidates[cell.index] = CellCandidates.from_digits([digit])
+        state.value_candidates[digit] += cell
+
+        # ACT
+        modifier.remove_candidate(7, cell)
+
+        # ASSERT
+        assert cell not in state.value_candidates[digit]
 
     def test_remove_candidates_updates_cell_candidates(self, modifier, state):
         # ARRANGE
-        cell = Mock(Cell, index=42)
-        cell_candidates = MagicMock(CellCandidates)
+        cell = Cell(42)
+        cell_candidates = CellCandidates.with_all()
+        candidates_to_remove = [2, 5, 9]
 
         state.cell_candidates[cell.index] = cell_candidates
+        for digit in range(1, 10):
+            state.value_candidates[digit] += cell
 
         # ACT
-        modifier.remove_candidate(7, cell)
+        modifier.remove_candidates(candidates_to_remove, cell)
 
         # ASSERT
-        cell_candidates.__isub__.assert_called_once_with(7)
+        for digit in candidates_to_remove:
+            assert digit not in state.cell_candidates[cell.index]
 
     def test_remove_candidates_updates_value_candidates(self, modifier, state):
         # ARRANGE
-        cell = Mock(Cell, index=42)
-        value_candidates = MagicMock(Cells)
+        cell = Cell(42)
+        cell_candidates = CellCandidates.with_all()
+        candidates_to_remove = [2, 5, 9]
 
-        state.value_candidates[7] = value_candidates
+        state.cell_candidates[cell.index] = cell_candidates
+        for digit in range(1, 10):
+            state.value_candidates[digit] += cell
 
         # ACT
-        modifier.remove_candidate(7, cell)
+        modifier.remove_candidates(candidates_to_remove, cell)
 
         # ASSERT
-        value_candidates.__isub__.assert_called_once_with(cell)
+        for digit in candidates_to_remove:
+            assert cell not in state.value_candidates[digit]
 
     def test_add_candidate_updates_cell_candidates(self, modifier, state):
         # ARRANGE
-        cell = Mock(Cell, index=42)
-        cell_candidates = MagicMock(CellCandidates)
-        candidates_to_remove = MagicMock(Cells)
+        cell = Cell(42)
 
-        state.cell_candidates[cell.index] = cell_candidates
+        # ACT
+        modifier.add_candidate(2, cell)
 
-        with patch(
-            "sudoku_strategy.grid.modifier.CellCandidates.from_digits",
-            return_value=candidates_to_remove,
-        ):
-            # ACT
-            modifier.remove_candidates([2, 5, 9], cell)
-
-            # ASSERT
-            candidates_to_remove.__invert__.assert_called_once()
-            cell_candidates.__iand__.assert_called_once_with(
-                candidates_to_remove.__invert__.return_value
-            )
+        # ASSERT
+        assert 2 in state.cell_candidates[cell.index]
 
     def test_add_candidate_updates_value_candidates(self, modifier, state):
         # ARRANGE
-        cell = Mock(Cell, index=42)
-        candidates_to_add = MagicMock(CellCandidates)
-        candidates_to_add.__iter__.return_value = iter([2])
-        edited_value_candidates = state.value_candidates[2]
+        cell = Cell(42)
 
-        with patch(
-            "sudoku_strategy.grid.modifier.CellCandidates.from_digits",
-            return_value=candidates_to_add,
-        ):
-            # ACT
-            modifier.remove_candidates([2], cell)
+        # ACT
+        modifier.add_candidate(2, cell)
 
-            # ASSERT
-            edited_value_candidates.__isub__.assert_called_once_with(cell)
+        # ASSERT
+        assert cell in state.value_candidates[2]
 
     def test_add_candidates_updates_cell_candidates(self, modifier, state):
         # ARRANGE
-        cell = Mock(Cell, index=24)
-        cell_candidates = MagicMock(CellCandidates)
-        candidates_to_add = MagicMock(CellCandidates)
+        cell = Cell(24)
+        candidates = [2, 5, 9]
 
-        state.cell_candidates[cell.index] = cell_candidates
+        # ACT
+        modifier.add_candidates(candidates, cell)
 
-        with patch(
-            "sudoku_strategy.grid.modifier.CellCandidates.from_digits",
-            return_value=candidates_to_add,
-        ):
-            # ACT
-            modifier.add_candidates([2, 5, 9], cell)
-
-            # ASSERT
-            cell_candidates.__ior__.assert_called_once_with(candidates_to_add)
+        # ASSERT
+        for digit in candidates:
+            assert digit in state.cell_candidates[cell.index]
 
     def test_add_candidates_updates_value_candidates(self, modifier, state):
         # ARRANGE
-        cell = Mock(Cell, index=24)
+        cell = Cell(24)
+        candidates = [2, 5, 9]
 
-        candidates_to_add = MagicMock(CellCandidates)
-        candidates_to_add.__iter__.return_value = iter([2, 5, 9])
+        # ACT
+        modifier.add_candidates(candidates, cell)
 
-        value_candidates_2 = state.value_candidates[2]
-        value_candidates_5 = state.value_candidates[5]
-        value_candidates_9 = state.value_candidates[9]
+        # ASSERT
+        for digit in candidates:
+            assert cell in state.value_candidates[digit]
 
-        with patch(
-            "sudoku_strategy.grid.modifier.CellCandidates.from_digits",
-            return_value=candidates_to_add,
-        ):
-            # ACT
-            modifier.add_candidates([2, 5, 9], cell)
-
-            # ASSERT
-            value_candidates_2.__iadd__.assert_called_once_with(cell)
-            value_candidates_5.__iadd__.assert_called_once_with(cell)
-            value_candidates_9.__iadd__.assert_called_once_with(cell)
-
-    def test_apply_sets_digit_when_given(self, modifier):
+    def test_apply_sets_digit_when_given(self, modifier, state):
         # ARRANGE
-        cell_digit = Mock(CellDigit, digit=7, cell=Mock(Cell))
-        deduction = Mock(Deduction, assignment=cell_digit, eliminations=[])
+        cell = Cell(27)
+        cell_digit = CellDigit(digit=7, cell=cell)
+        deduction = Deduction(
+            assignment=cell_digit,
+            eliminations=[],
+            strategy="",
+            explanation="",
+        )
 
-        with patch.object(modifier, "write_digit") as write_digit:
-            # ACT
-            modifier.apply(deduction)
+        modifier.apply(deduction)
 
-            # ASSERT
-            write_digit.assert_called_once_with(7, cell_digit.cell)
+        # ASSERT
+        assert state.digits[cell.index] == 7
 
     def test_apply_removes_candidates_when_eliminations_are_given(self, modifier):
         # ARRANGE
-        elimination_1 = Mock(CellDigit, digit=2, cell=Mock(Cell))
-        elimination_2 = Mock(CellDigit, digit=5, cell=Mock(Cell))
+        elimination_1 = CellDigit(digit=2, cell=Cell(0))
+        elimination_2 = CellDigit(digit=5, cell=Cell(1))
 
-        deduction = Mock(
-            Deduction, assignment=None, eliminations=[elimination_1, elimination_2]
+        deduction = Deduction(
+            assignment=None,
+            eliminations=[elimination_1, elimination_2],
+            explanation="",
+            strategy="",
         )
 
         with patch.object(modifier, "remove_candidate") as remove_candidate:
@@ -299,63 +282,54 @@ class TestGridModifier:
             assert remove_candidate.call_count == 2
 
     def test_compute_candidates_initialises_filled_cells_as_empty(
-        self, modifier, state, cell_groups
+        self,
+        modifier,
+        state,
+        cell_groups,
     ):
         # ARRANGE
-        cell = Mock(Cell, index=10)
-        cell_groups.filled_cells.return_value = [cell]
-        cell_groups.empty_cells.return_value = []
+        cell = Cell(10)
+        state.filled_cells += cell
 
-        empty_candidates = MagicMock(CellCandidates)
-
-        with (
-            patch(
-                "sudoku_strategy.grid.modifier.CellCandidates.empty",
-                return_value=empty_candidates,
-            ),
-            patch.object(modifier, "update_candidates"),
-        ):
-            # ACT
-            modifier.compute_candidates()
+        # ACT
+        modifier.compute_candidates()
 
         # ASSERT
-        assert state.cell_candidates[cell.index] is empty_candidates
+        assert len(state.cell_candidates[cell.index]) == 0
 
     def test_compute_candidates_initialises_empty_cells_with_all_candidates(
-        self, modifier, state, cell_groups
+        self,
+        modifier,
+        state,
+        cell_groups,
     ):
         # ARRANGE
         cell = Mock(Cell, index=10)
-        cell_groups.filled_cells.return_value = []
-        cell_groups.empty_cells.return_value = [cell]
 
-        all_candidates = MagicMock(CellCandidates)
-
-        with patch(
-            "sudoku_strategy.grid.modifier.CellCandidates.with_all",
-            return_value=all_candidates,
-        ):
-            # ACT
-            modifier.compute_candidates()
+        # ACT
+        modifier.compute_candidates()
 
         # ASSERT
-        assert state.cell_candidates[cell.index] is all_candidates
+        assert len(state.cell_candidates[cell.index]) == 9
 
     def test_compute_candidates_updates_candidates_for_filled_cells(
-        self, modifier, state, cell_groups
+        self,
+        modifier,
+        state,
+        cell_groups,
     ):
         # ARRANGE
-        cell = Mock(Cell, index=10)
-        state.digits[cell.index] = 3
-        cell_groups.filled_cells.return_value = [cell]
-        cell_groups.empty_cells.return_value = []
+        cell = Cell(10)
+        digit = 3
+        state.digits[cell.index] = digit
+        state.filled_cells += cell
 
         with patch.object(modifier, "update_candidates") as update_candidates:
             # ACT
             modifier.compute_candidates()
 
         # ASSERT
-        update_candidates.assert_called_once_with(3, cell)
+        update_candidates.assert_called_once_with(digit, cell)
 
     def test_reset_restores_digits(self, modifier, state):
         # ARRANGE
@@ -370,35 +344,28 @@ class TestGridModifier:
 
     def test_reset_sets_all_cell_candidates_to_empty(self, modifier, state):
         # ARRANGE
-        empty_candidates = MagicMock(CellCandidates)
+        state.cell_candidates = [CellCandidates.with_all() for _ in range(81)]
 
-        with patch(
-            "sudoku_strategy.grid.modifier.CellCandidates.empty",
-            return_value=empty_candidates,
-        ) as empty:
-            # ACT
-            modifier.reset()
+        # ACT
+        modifier.reset()
 
-            # ASSERT
-            assert state.cell_candidates == [empty_candidates] * 81
-            assert empty.call_count == 81
+        # ASSERT
+        assert all(len(candidates) == 0 for candidates in state.cell_candidates)
 
     def test_reset_sets_all_value_candidates_to_empty(self, modifier, state):
         # ARRANGE
-        empty_candidates = MagicMock(CellCandidates)
+        state.value_candidates = [Cells.with_all() for _ in range(10)]
 
-        with patch(
-            "sudoku_strategy.grid.modifier.Cells",
-            return_value=empty_candidates,
-        ) as empty:
-            # ACT
-            modifier.reset()
+        # ACT
+        modifier.reset()
 
-            # ASSERT
-            assert state.value_candidates == [empty_candidates] * 10
-            assert empty.call_count == 10
+        # ASSERT
+        assert all(len(cells) == 0 for cells in state.value_candidates[1:])
 
     def test_reset_updates_filled_cells(self, modifier, state):
+        # ARRANGE
+        state.fill_filled_cells = Mock()
+
         # ACT
         modifier.reset()
 

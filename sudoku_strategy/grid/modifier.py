@@ -163,5 +163,5 @@ class GridModifier:
         self._state.digits = list(self._state.puzzle_digits)
         self._state.cell_candidates = [CellCandidates.empty() for _ in range(81)]
 
-        self._state.value_candidates = [Cells() for _ in range(10)]
+        self._state.value_candidates = [Cells.empty() for _ in range(10)]
         self._state.fill_filled_cells()

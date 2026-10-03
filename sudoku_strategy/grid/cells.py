@@ -21,7 +21,7 @@ class Cells:
     # Bit mask of 1s in every position that could be set
     _MASK = (1 << 81) - 1
 
-    def __init__(self, mask: int = 0):
+    def __init__(self, mask: int):
         """Create a Cells object from the given bit mask.
 
         Defaults to a collection of no cells.
@@ -29,6 +29,14 @@ class Cells:
         Args:
             mask: The bit mask to use."""
         self._mask = mask
+
+    @classmethod
+    def with_all(cls) -> Self:
+        return cls(cls._MASK)
+
+    @classmethod
+    def empty(cls) -> Self:
+        return cls(0)
 
     def first(self) -> Cell:
         """Return the first cell in the collection.
@@ -112,3 +120,10 @@ class Cells:
             index = bit.bit_length() - 1
             yield Cell(index)
             mask ^= bit
+
+    def __eq__(self, other: object) -> bool:
+        """Check if two cells objects contain the same cells."""
+        if not isinstance(other, Cells):
+            return NotImplemented
+
+        return self._mask == other._mask

@@ -2,44 +2,40 @@ from unittest.mock import Mock, call
 
 import pytest
 
-from sudoku_strategy.grid import CellGroups, Grid, GridAnalysis, GridModifier, GridState
+from sudoku_strategy.grid import (
+    Cell,
+    CellGroups,
+    Grid,
+    GridAnalysis,
+    GridModifier,
+    GridState,
+)
 from sudoku_strategy.solver.solver import Solver
 from sudoku_strategy.strategy import Deduction
 from sudoku_strategy.strategy.abs_strategy import AbsStrategy
+from sudoku_strategy.strategy.deduction import CellDigit
 
 
 class TestSolver:
     @pytest.fixture
     def state(self):
-        return Mock(GridState)
+        return GridState.create_empty()
 
     @pytest.fixture
     def cell_groups(self, state):
-        cell_groups = Mock(CellGroups)
-        cell_groups._state = state
-        return cell_groups
+        return CellGroups(state)
 
     @pytest.fixture
     def analysis(self, state, cell_groups):
-        analysis = Mock(GridAnalysis)
-        analysis._state = state
-        analysis.cell_groups = cell_groups
-        return analysis
+        return GridAnalysis(state, cell_groups)
 
     @pytest.fixture
     def modifier(self, state, cell_groups):
-        modifier = Mock(GridModifier)
-        modifier._state = state
-        modifier._cell_groups = cell_groups
-        return modifier
+        return GridModifier(state, cell_groups)
 
     @pytest.fixture
     def grid(self, analysis, modifier, state):
-        grid = Mock(Grid)
-        grid._state = state
-        grid.modify = modifier
-        grid.analyse = analysis
-        return grid
+        return Grid(state, modifier, analysis)
 
     def test_find_next_returns_deduction_from_first_strategy(self, grid, analysis):
         # ARRANGE
@@ -110,7 +106,7 @@ class TestSolver:
         working_analysis = Mock(GridAnalysis)
         working_grid.analyse = working_analysis
 
-        grid.copy.return_value = working_grid
+        grid.copy = Mock(return_value=working_grid)
         working_analysis.is_complete.side_effect = [True]
 
         solver = Solver()
@@ -125,11 +121,12 @@ class TestSolver:
 
     def test_solve_finds_and_applies_deductions(self, grid, modifier):
         # ARRANGE
-        grid.copy.return_value = grid
+        grid.copy = Mock(return_value=grid)
+        grid.analyse.is_complete = Mock(side_effect=[False, True])
+        grid.modify.apply = Mock()
 
-        deduction = Mock(Deduction)
-
-        grid.analyse.is_complete.side_effect = [False, True]
+        assignment = CellDigit(Cell(5), 7)
+        deduction = Deduction(strategy="", explanation="", assignment=assignment)
 
         solver = Solver()
         solver.find_next = Mock(side_effect=[deduction])
@@ -145,12 +142,18 @@ class TestSolver:
 
     def test_solve_finds_and_applies_multiple_deductions(self, grid, modifier):
         # ARRANGE
-        grid.copy.return_value = grid
+        grid.copy = Mock(return_value=grid)
+        grid.analyse.is_complete = Mock(side_effect=[False, False, True])
+        grid.modify.apply = Mock()
 
-        first_deduction = Mock(Deduction)
-        second_deduction = Mock(Deduction)
-
-        grid.analyse.is_complete.side_effect = [False, False, True]
+        first_assignment = CellDigit(Cell(5), 7)
+        first_deduction = Deduction(
+            strategy="", explanation="first", assignment=first_assignment
+        )
+        second_assignment = CellDigit(Cell(9), 2)
+        second_deduction = Deduction(
+            strategy="", explanation="second", assignment=second_assignment
+        )
 
         solver = Solver()
         solver.find_next = Mock(side_effect=[first_deduction, second_deduction])
@@ -171,8 +174,8 @@ class TestSolver:
 
     def test_solve_stops_when_no_deduction_is_found(self, grid):
         # ARRANGE
-        grid.copy.return_value = grid
-        grid.analyse.is_complete.return_value = False
+        grid.copy = Mock(return_value=grid)
+        grid.analyse.is_complete = Mock(return_value=False)
 
         solver = Solver()
         solver.find_next = Mock(return_value=None)
@@ -185,8 +188,8 @@ class TestSolver:
 
     def test_solve_logs_warning_when_no_deduction_is_found(self, grid, caplog):
         # ARRANGE
-        grid.copy.return_value = grid
-        grid.analyse.is_complete.return_value = False
+        grid.copy = Mock(return_value=grid)
+        grid.analyse.is_complete = Mock(return_value=False)
 
         solver = Solver()
         solver.find_next = Mock(return_value=None)

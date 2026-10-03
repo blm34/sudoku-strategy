@@ -98,7 +98,7 @@ class GridState:
         Returns:
             The resulting contents of `value_candidates`
         """
-        self.value_candidates = [Cells() for _ in range(10)]
+        self.value_candidates = [Cells.empty() for _ in range(10)]
 
         for idx, candidates in enumerate(self.cell_candidates):
             for digit in candidates:
@@ -114,7 +114,7 @@ class GridState:
         Returns:
             The resulting value of `filled_cells`
         """
-        self.filled_cells = Cells()
+        self.filled_cells = Cells.empty()
         for idx, digit in enumerate(self.digits):
             if digit:
                 self.filled_cells += Cell(idx)

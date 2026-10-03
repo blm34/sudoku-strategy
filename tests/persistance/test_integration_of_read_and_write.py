@@ -1,15 +1,44 @@
 from io import StringIO
 
+from hypothesis import given
+from hypothesis import strategies as st
+
 from sudoku_strategy.grid import CellCandidates, Grid, GridState
 from sudoku_strategy.persistance.readers import JsonReader, SusserReader
 from sudoku_strategy.persistance.writers import JsonWriter, SusserWriter
 
+st_sudoku_digit = st.integers(min_value=0, max_value=9)
+st_sudoku_digits = st.lists(st_sudoku_digit, min_size=81, max_size=81)
 
-def test_susser_round_trip():
+st_cell_candidate = st.builds(
+    CellCandidates,
+    st.integers(min_value=0, max_value=0b111111111),
+)
+st_cell_candidates = st.lists(st_cell_candidate, min_size=81, max_size=81)
+
+
+@st.composite
+def grid_states(draw):
+    puzzle_digits = draw(st_sudoku_digits)
+
+    digits = [
+        draw(st_sudoku_digit if puzzle_digit == 0 else st.just(puzzle_digit))
+        for puzzle_digit in puzzle_digits
+    ]
+
+    cell_candidates = draw(st_cell_candidates)
+
+    state = GridState.new_puzzle(tuple(digits))
+    state.digits = digits
+    state.cell_candidates = cell_candidates
+
+    return state
+
+
+@given(state=grid_states())
+def test_susser_round_trip(state):
     # ARRANGE
-    original_state = GridState.create_empty()
-    original_state.digits = list(range(1, 10)) * 9
-    original = Grid.from_state(original_state)
+    original = Grid.from_state(state)
 
     stream = StringIO()
 
@@ -24,23 +53,10 @@ def test_susser_round_trip():
     assert result._state.digits == original._state.digits
 
 
-def test_json_round_trip():
+@given(state=grid_states())
+def test_json_round_trip(state):
     # ARRANGE
-    puzzle_digits = [0] * 81
-    for val, idx in enumerate(range(0, 81, 10), start=1):
-        puzzle_digits[idx] = val
-
-    original_state = GridState.new_puzzle(tuple(puzzle_digits))
-
-    original_state.digits[1] = 4
-    original_state.digits[2] = 5
-    original_state.digits[9] = 6
-
-    original_state.cell_candidates[3] = CellCandidates(0b111100110)
-    original_state.cell_candidates[4] = CellCandidates(0b111100110)
-    original_state.cell_candidates[5] = CellCandidates(0b111100110)
-
-    original = Grid.from_state(original_state)
+    original = Grid.from_state(state)
 
     stream = StringIO()
 
@@ -52,4 +68,11 @@ def test_json_round_trip():
     result = JsonReader().read(stream)
 
     # ASSERT
-    assert result._state.digits == original._state.digits
+    assert result._state.digits == state.digits
+
+    assert result._state.puzzle_digits == state.puzzle_digits
+
+    for idx in range(81):
+        assert (
+            result._state.cell_candidates[idx]._mask == state.cell_candidates[idx]._mask
+        )

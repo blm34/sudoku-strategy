@@ -1,8 +1,6 @@
-from unittest.mock import Mock
-
 import pytest
 
-from sudoku_strategy.grid import CellCandidates
+from sudoku_strategy.grid import Cell, CellCandidates
 from sudoku_strategy.grid.state import GridState
 
 
@@ -48,7 +46,7 @@ class TestGridState:
         grid = GridState.create_empty()
 
         # ASSERT
-        assert grid.filled_cells._mask == 0
+        assert len(grid.filled_cells) == 0
 
     def test_new_puzzle_adds_digits_to_digits(self):
         # ARRANGE
@@ -109,9 +107,8 @@ class TestGridState:
 
     def test_copy_returns_same_candidates(self, state):
         # ARRANGE
-        candidate = Mock(CellCandidates)
-        candidate.__iter__ = lambda _: iter(range(9))
-        state.cell_candidates = [candidate]  # type: ignore[reportAttributeAccessIssue]
+        candidate = CellCandidates.with_all()
+        state.cell_candidates = [candidate]
 
         # ACT
         copy = state.copy()
@@ -143,9 +140,8 @@ class TestGridState:
 
     def test_copy_has_independent_candidates(self, state):
         # ARRANGE
-        candidate = Mock(CellCandidates)
-        candidate.__iter__ = lambda _: iter(range(9))
-        state.cell_candidates = [candidate]  # type: ignore[reportAttributeAccessIssue]
+        candidate = CellCandidates.with_all()
+        state.cell_candidates = [candidate]
 
         # ACT
         copy = state.copy()
@@ -155,29 +151,26 @@ class TestGridState:
 
     def test_fill_value_candidates_adds_candidates_for_correct_digit(self, state):
         # ARRANGE
-        mock_candidate = Mock(CellCandidates)
         digit = 5
-        mock_candidate.__iter__ = lambda _: iter([digit])
-        cell_index = 7
-        state.cell_candidates[cell_index] = mock_candidate
+        mock_candidates = CellCandidates.from_digits([digit])
+        cell = Cell(7)
+        state.cell_candidates[cell.index] = mock_candidates
 
         # ACT
         state.fill_value_candidates()
 
         # ASSERT
-        assert state.value_candidates[digit]._mask == 1 << cell_index
+        assert cell in state.value_candidates[digit]
 
     def test_fill_filled_cells_contains_correct_cells(self, state):
         # ARRANGE
-        state.digits[5] = 1
-        state.digits[20] = 7
-        state.digits[59] = 4
+        cells = (Cell(5), Cell(20), Cell(70))
+        for cell in cells:
+            state.digits[cell.index] = 1
 
         # ACT
         state.fill_filled_cells()
 
         # ASSERT
-        filled = state.filled_cells
-        assert filled._mask & 1 << 5
-        assert filled._mask & 1 << 20
-        assert filled._mask & 1 << 59
+        assert len(state.filled_cells) == len(cells)
+        assert all(cell in state.filled_cells for cell in cells)
