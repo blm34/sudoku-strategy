@@ -116,3 +116,10 @@ class Cells:
             index = bit.bit_length() - 1
             yield Cell(index)
             mask ^= bit
+
+    def __eq__(self, other: object) -> bool:
+        """Check if two cells objects contain the same cells."""
+        if not isinstance(other, Cells):
+            return NotImplemented
+
+        return self._mask == other._mask

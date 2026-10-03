@@ -294,3 +294,59 @@ class TestCells:
 
         # ASSERT
         assert first_iteration == second_iteration
+
+    @pytest.mark.parametrize(
+        "mask",
+        (
+            0b0,
+            0b11110101110100101011,
+            0b1111111100101,
+        ),
+    )
+    def test_eq_is_true_for_cell_with_itself(self, mask):
+        # ARRANGE
+        cells = Cells(mask)
+
+        # ACT
+        equal = cells == cells  # noqa: PLR0124
+
+        # ASSERT
+        assert equal
+
+    @pytest.mark.parametrize(
+        "mask",
+        (
+            0b0,
+            0b000010011101,
+            0b11111,
+        ),
+    )
+    def test_eq_is_true_for_identical_cells(self, mask):
+        # ARRANGE
+        cells1 = Cells(mask)
+        cells2 = Cells(mask)
+
+        # ACT
+        equal = cells1 == cells2
+
+        # ASSERT
+        assert equal
+
+    @pytest.mark.parametrize(
+        "mask",
+        (
+            0b0,
+            0b000010011101,
+            0b11111,
+        ),
+    )
+    def test_eq_is_false_for_different_cell_contents(self, mask):
+        # ARRANGE
+        cells1 = Cells(mask)
+        cells2 = Cells(mask + 1)
+
+        # ACT
+        equal = cells1 == cells2
+
+        # ASSERT
+        assert not equal
