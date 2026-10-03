@@ -18,7 +18,7 @@ class TestHiddenSingleStrategy:
 
         hidden_single = Cell.from_position(3, 1)
         state.cell_candidates[hidden_single.index] = CellCandidates.from_digits([5])
-        state.value_candidates[5] = Cells() + hidden_single
+        state.value_candidates[5] = Cells.empty() + hidden_single
 
         # ACT
         deduction = strategy.find(analysis)
