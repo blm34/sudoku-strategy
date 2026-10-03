@@ -30,6 +30,10 @@ class Cells:
             mask: The bit mask to use."""
         self._mask = mask
 
+    @classmethod
+    def with_all(cls) -> Self:
+        return cls(cls._MASK)
+
     def first(self) -> Cell:
         """Return the first cell in the collection.
 

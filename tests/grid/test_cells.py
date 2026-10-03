@@ -15,6 +15,23 @@ class TestCells:
         # ASSERT
         assert mask == 0
 
+    def test_with_all_contains_all_cells(self):
+        # ACT
+        cells = Cells.with_all()
+
+        # ASSERT
+        assert len(cells) == 81
+
+    def test_with_all_gives_the_complement_of_empty(self):
+        # ARRANGE
+        expected_cells = ~Cells()
+
+        # ACT
+        cells = Cells.with_all()
+
+        # ASSERT
+        assert cells == expected_cells
+
     @pytest.mark.parametrize(
         ("mask", "index"),
         (
