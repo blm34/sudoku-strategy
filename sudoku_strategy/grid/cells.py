@@ -21,7 +21,7 @@ class Cells:
     # Bit mask of 1s in every position that could be set
     _MASK = (1 << 81) - 1
 
-    def __init__(self, mask: int = 0):
+    def __init__(self, mask: int):
         """Create a Cells object from the given bit mask.
 
         Defaults to a collection of no cells.
@@ -33,6 +33,10 @@ class Cells:
     @classmethod
     def with_all(cls) -> Self:
         return cls(cls._MASK)
+
+    @classmethod
+    def empty(cls) -> Self:
+        return cls(0)
 
     def first(self) -> Cell:
         """Return the first cell in the collection.
