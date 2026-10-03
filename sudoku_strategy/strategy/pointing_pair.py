@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class PointingPair:
     digit: int
     box: int
-    cells: Cells
+    line: Cells
 
 
 class PointingPairStrategy(AbsStrategy):
@@ -60,7 +60,7 @@ class PointingPairStrategy(AbsStrategy):
                     yield PointingPair(
                         digit=digit,
                         box=box_id,
-                        cells=analysis.cell_groups.row(row),
+                        line=analysis.cell_groups.row(row),
                     )
 
                 # Check columns
@@ -69,7 +69,7 @@ class PointingPairStrategy(AbsStrategy):
                     yield PointingPair(
                         digit=digit,
                         box=box_id,
-                        cells=analysis.cell_groups.col(col),
+                        line=analysis.cell_groups.col(col),
                     )
 
     def _get_eliminations(
@@ -78,12 +78,15 @@ class PointingPairStrategy(AbsStrategy):
         pointing_pair: PointingPair,
     ) -> list[CellDigit]:
         """Get eliminations inferred by a pointing pair."""
-        eliminations = []
-        for cell in pointing_pair.cells:
-            if cell.box == pointing_pair.box:
-                continue
+        cells = pointing_pair.line & ~analysis.cell_groups.box(pointing_pair.box)
+        cells_with_candidate = analysis.get_cells_with_candidate(
+            cells,
+            pointing_pair.digit,
+        )
 
-            if analysis.cell_has_candidate(cell, pointing_pair.digit):
-                eliminations.append(CellDigit(cell=cell, digit=pointing_pair.digit))
+        eliminations = [
+            CellDigit(cell=cell, digit=pointing_pair.digit)
+            for cell in cells_with_candidate
+        ]
 
         return eliminations
