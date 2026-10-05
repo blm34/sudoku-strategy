@@ -5,6 +5,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build Distribution
@@ -44,7 +47,6 @@ jobs:
 
     permissions:
       id-token: write
-      contents: read
 
     steps:
       - name: Download distributions
